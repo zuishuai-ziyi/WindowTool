@@ -53,7 +53,7 @@ class profile:
         return None
 
 
-class profile_shell:
+class ProfileShell:
     def __init__(self, profile_path: str) -> None:
         self.profile_path_obj = profile(profile_path)
         self.default_data: dict[str, Any] = {}
@@ -105,7 +105,7 @@ class profile_shell:
 
 
 if __name__ == '__main__':
-    obj = profile_shell('.\\test.yaml')
+    obj = ProfileShell('.\\test.yaml')
     print(obj['a'])
     obj['a'] = 5
     print(obj['a'])
