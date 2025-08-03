@@ -2,7 +2,7 @@ from transparent_overlay_window import TransparentOverlayWindow as TOW
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QGridLayout, QLabel, QPushButton, QFormLayout, QHBoxLayout, QDialog, QLineEdit
 from PyQt5.QtGui import QCloseEvent, QIcon, QDoubleValidator, QRegExpValidator, QPixmap
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QRegExp
-from operation_profile import profile_shell as ProfileShellClass
+from operation_profile import ProfileShell as ProfileShellClass
 from typing import Any, Dict, Literal, List, Callable, Never
 import sys, win32gui, win32con, psutil, keyboard, ctypes, os, traceback, pywintypes, time, pyautogui, functools
 

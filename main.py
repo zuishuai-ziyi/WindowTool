@@ -1,16 +1,17 @@
 from transparent_overlay_window import TransparentOverlayWindow as TOW
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QGridLayout, QLabel, QPushButton, QFormLayout, QHBoxLayout, QDialog, QLineEdit
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QGridLayout, QLabel, QPushButton, QFormLayout, QHBoxLayout, QDialog, QLineEdit, QTextEdit, QPlainTextEdit, QSizePolicy
 from PyQt5.QtGui import QCloseEvent, QIcon, QDoubleValidator, QRegExpValidator
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QRegExp
-from api import get_top_window_under_mouse
+from api import get_top_window_under_mouse, get_window_pos_and_size
 from buttonbox import main as show_buttonbox
 from kill_process import kill_process, kill_process_with_NtTerminate, kill_process_with_terminate
 from delete_file import delete_file
 from suspend_process import suspend_process, suspend_process_with_NtSuspendProcess, suspend_process_with_psutil_lib, resume_process, resume_process_with_NtResumeProcess, resume_process_with_psutil_lib
 from other_window import input_box_window
-from operation_profile import profile_shell as ProfileShellClass
-from typing import Any, Dict, Literal, List, Callable, Never
-import sys, win32gui, win32con, psutil, keyboard, ctypes, os, traceback, pywintypes, time, threading, webbrowser, functools
+from operation_profile import ProfileShell as ProfileShellClass
+from observe_window import ObserveWindow
+from typing import Any, Dict, Literal, List, Callable, Never, NoReturn, Iterable
+import sys, win32gui, win32con, psutil, keyboard, ctypes, os, traceback, pywintypes, time, threading, webbrowser, functools, re
 
 
 class MainWindow(QWidget):
@@ -43,6 +44,7 @@ class MainWindow(QWidget):
         self.is_getting_info = False
         self.last_on_top_time = time.time()
         self.last_keep_work_time = time.time()
+        self.last_sel_window_info = {'pos': None, 'size': None}
 
         # 设置窗口位置和大小
         screen = app.primaryScreen().availableGeometry() # type: ignore
@@ -63,7 +65,14 @@ class MainWindow(QWidget):
     def main_UI(self) -> None:
         self.select_hwnd = None
         self.select_pid = None
-        self.select_obj = None  # 选中进程的 process 对象
+        self.select_obj = None
+        '''选中进程的 process 对象'''
+        self.observe_obj = None
+        '''观察目标窗口的观察器对象'''
+        self.is_setting_input_box: Dict[str, bool] = dict((item, False) for item in
+            {'title', 'pos', 'size'}
+        )
+        '''当前程序是否正在更改某个输入框的文本'''
         self.select_process_info: Dict[str, Any] = {  # 选中进程的其他信息
             'suspend': False,  # 是否挂起
         }
@@ -82,42 +91,106 @@ class MainWindow(QWidget):
         # 添加 窗口数据布局
         self.selec_window_info_layout = QFormLayout()
 
+        # 定义辅助函数
+        def get_QLabel_read_only(*args: Any, **kwargs: Any) -> QLabel:
+            '''创建可复制的 QLabel '''
+            obj = QLabel(*args, **kwargs)
+            obj.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard) # type: ignore  # 设置可复制
+            return obj
+        def get_QLineEdit_read_only(*args: Any, width: int = 85) -> QLineEdit:
+            '''创建禁用且固定宽度的 QLineEdit '''
+            obj = QLineEdit(*args)
+            obj.setFixedWidth(width)
+            obj.setEnabled(False)
+            return obj
+
         # 添加窗口数据控件
         default_text: str = '[ 无数据 ]'
         
         self.sel_wind_info_widgets: dict[Literal['window_title'] | Literal['window_exe'] | Literal['window_pos'] | Literal['window_size'] | Literal['process_pid'] | Literal['process_hwnd'], Dict[Any, Any]] = {}
         self.sel_wind_info_widgets['process_pid'] = {
             'display': "进程PID：",
-            'obj': QLabel(default_text)
+            'obj': get_QLabel_read_only(default_text)
         }
         self.sel_wind_info_widgets['process_hwnd'] = {
             'display': "窗口句柄：",
-            'obj': QLabel(default_text)
+            'obj': get_QLabel_read_only(default_text)
         }
         self.sel_wind_info_widgets['window_title'] = {
             'display': "窗口标题：",
-            'obj': QLabel(default_text)
+            'obj': (
+                (
+                    obj := get_QLineEdit_read_only(default_text, width=300),
+                    obj.editingFinished.connect(self.slot_of_size_title_pos_input_box_edit_finished)
+                ),
+                (obj, )
+            )[1]
         }
         self.sel_wind_info_widgets['window_pos'] = {
             'display': "窗口位置：",
-            'obj': QLabel(default_text)
+            'obj': (
+                (  # 初始化
+                    x_text := QLabel('x: '),
+                    x_text.setFixedWidth(20),
+                    y_text := QLabel('y: '),
+                    y_text.setFixedWidth(20),
+                    x_input_box := get_QLineEdit_read_only(default_text),
+                    y_input_box := get_QLineEdit_read_only(default_text),
+                    x_input_box.editingFinished.connect(self.slot_of_size_title_pos_input_box_edit_finished),
+                    y_input_box.editingFinished.connect(self.slot_of_size_title_pos_input_box_edit_finished),
+                ),
+                (  # 添加
+                    x_text,
+                    x_input_box,
+                    y_text,
+                    y_input_box
+                )
+            )[1]
         }
         self.sel_wind_info_widgets['window_size'] = {
             'display': "窗口大小：",
-            'obj': QLabel(default_text)
+            'obj': (
+                (  # 初始化
+                    w_text := QLabel('宽: '),
+                    w_text.setFixedWidth(20),
+                    h_text := QLabel('高: '),
+                    h_text.setFixedWidth(20),
+                    w_input_box := get_QLineEdit_read_only(default_text),
+                    h_input_box := get_QLineEdit_read_only(default_text),
+                    w_input_box.editingFinished.connect(self.slot_of_size_title_pos_input_box_edit_finished),
+                    h_input_box.editingFinished.connect(self.slot_of_size_title_pos_input_box_edit_finished),
+                ),
+                (  # 添加
+                    w_text,
+                    w_input_box,
+                    h_text,
+                    h_input_box
+                )
+            )[1]
         }
         self.sel_wind_info_widgets['window_exe'] = {
             'display': "可执行文件位置：",
-            'obj': QLabel(default_text)
+            'obj': get_QLabel_read_only(default_text)
         }
 
         # 添加控件至 窗口数据布局
         for k in self.sel_wind_info_widgets:
             v = self.sel_wind_info_widgets[k]
-            self.selec_window_info_layout.addRow(v['display'], v['obj'])
-
+            if not isinstance(v['obj'], (list, tuple)):
+                # 仅一个控件，直接添加
+                self.selec_window_info_layout.addRow(v['display'], v['obj'])
+                continue
+            # 多个控件，依次添加至水平布局
+            t_widget = QWidget()  # 创建临时控件
+            t_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)  # 设置临时控件固定宽高
+            t_layout = QHBoxLayout(t_widget)  # 设置布局的父控件为临时控件
+            t_layout.setContentsMargins(0, 0, 0, 0)  # 消除边距
+            for w in v['obj']:  # 将控件添加至布局
+                t_layout.addWidget(w)
+            self.selec_window_info_layout.addRow(v['display'], t_widget)  # 将临时控件添加至布局，以确保宽度固定
         # 将 窗口数据布局 添加至 主布局
         main_layout.addLayout(self.selec_window_info_layout)
+
 
         # 添加 窗口操作布局
         dos_button_layout = QGridLayout()
@@ -200,7 +273,7 @@ class MainWindow(QWidget):
                     parent=self,
                     title='运行',
                     icon_path=get_file_path('data\\icon\\run.svg'),
-                    info_text='ZiYi 将根据你所输入的名称，为你打开相应的程序、文件夹、文档或 Internet 资源。',
+                    info_text='子逸 将根据你所输入的名称，为你打开相应的程序、文件夹、文档或 Internet 资源。',
                     buttons=('确定', '取消'),
                     input_box_tip='请在此处输入...',
                     button_click_callback = \
@@ -322,7 +395,7 @@ class MainWindow(QWidget):
     def chose_window(self) -> None:
         '''已选择窗口'''
         # 判断句柄是否有效
-        if not self.select_hwnd or not win32gui.IsWindow(self.select_hwnd):
+        if not self.IsWindow(self.select_hwnd):
             print(f'当前句柄“{self.select_hwnd}”无效')
             return
         # 停止选择
@@ -337,17 +410,33 @@ class MainWindow(QWidget):
         # 更新数据
         self.select_obj = psutil.Process(self.select_pid)
         self.select_process_info['suspend'] = False
+        # 监测目标窗口尺寸/位置/标题变化
+        def _set_attribute(dict_obj: Dict, keys: str | Iterable[str], value: Any) -> None:
+            '''设置 给定字典的所有给定属性为给定值'''
+            if isinstance(keys, str):
+                dict_obj[keys] = value
+                return
+            for key in keys:
+                dict_obj[key] = value
+        self.observe_obj = ObserveWindow(self.select_hwnd, # type: ignore
+            lambda old_info, new_info: (
+                # 更新设置状态，防止更新窗口位置
+                # _set_attribute(self.is_setting_input_box, ('title', 'pos', 'size'), True),
+                # 更新输入框文本
+                self.sel_wind_info_widgets['window_title']['obj'][0].setText(new_info['title']),
+                self.sel_wind_info_widgets['window_pos']['obj'][1].setText(str(new_info['pos'][0])),
+                self.sel_wind_info_widgets['window_pos']['obj'][3].setText(str(new_info['pos'][1])),
+                self.sel_wind_info_widgets['window_size']['obj'][1].setText(str(new_info['size'][0])),
+                self.sel_wind_info_widgets['window_size']['obj'][3].setText(str(new_info['size'][1])),
+                # 更新文本后重置设置状态
+                # _set_attribute(self.is_setting_input_box, ('title', 'pos', 'size'), False),
+            ),
+            wait_time=0
+        )
+        self.observe_obj.start()
         # 更改显示信息
-        left, top, right, bottom, width, height = self.get_pos(self.select_hwnd)
-        title = win32gui.GetWindowText(chose_window_hwnd) # type: ignore
-        exe_file_path = self.select_obj.exe()
-        self.sel_wind_info_widgets['window_title']['obj'].setText(title)
-        self.sel_wind_info_widgets['window_exe']['obj'].setText(exe_file_path)
-        self.sel_wind_info_widgets['window_pos']['obj'].setText(f'x:{left} y:{top}')
-        self.sel_wind_info_widgets['window_size']['obj'].setText(f'{width}x{height}')
-        self.sel_wind_info_widgets['process_pid']['obj'].setText(str(self.select_pid))
-        self.sel_wind_info_widgets['process_hwnd']['obj'].setText(str(self.select_hwnd))
-    
+        self.update_input_box()
+
     def slot_of_setbutton(self):
         '''设置按钮槽函数'''
         # 创建设置窗口
@@ -389,9 +478,80 @@ class MainWindow(QWidget):
         if 0 <= profile_obj.get('set_up', {'keep_work_time': 0}).get('keep_work_time', 0) <= time.time() - self.last_keep_work_time:
             # 重置时间
             self.last_keep_work_time = time.time()
-            # 关闭
+            # 恢复状态
             self.showNormal()
+        # 更新输入框
+        select_is_window = self.IsWindow(self.select_hwnd)
 
+        self.sel_wind_info_widgets['window_title']['obj'][0].setEnabled(select_is_window)
+
+        self.sel_wind_info_widgets['window_pos']['obj'][1].setEnabled(select_is_window)
+        self.sel_wind_info_widgets['window_pos']['obj'][3].setEnabled(select_is_window)
+
+        self.sel_wind_info_widgets['window_size']['obj'][1].setEnabled(select_is_window)
+        self.sel_wind_info_widgets['window_size']['obj'][3].setEnabled(select_is_window)
+
+    def slot_of_size_title_pos_input_box_edit_finished(self) -> None:
+        '''大小/位置/标题输入框 改变槽函数'''
+        # 设置窗口属性
+        if self.IsWindow(self.select_hwnd) and not any(self.is_setting_input_box[k] for k in self.is_setting_input_box if k in ('pos', 'size')):
+            # 选中窗口有效 且 位置/尺寸 输入框由用户改变
+            # 编译正则表达式，匹配整数
+            match_int = re.compile(r'^-?\d+$')
+            # 设置属性
+            win32gui.SetWindowPos(  # 设置窗口位置与尺寸
+                self.select_hwnd,  # 目标窗口 # type: ignore
+                None,  # 置顶状态不变
+                # 设置窗口位置
+                int(
+                    self.sel_wind_info_widgets['window_pos']['obj'][1].text()
+                ) if match_int.match(
+                    self.sel_wind_info_widgets['window_pos']['obj'][1].text()
+                ) else 0,
+                int(
+                    self.sel_wind_info_widgets['window_pos']['obj'][3].text()
+                ) if match_int.match(
+                    self.sel_wind_info_widgets['window_pos']['obj'][3].text()
+                ) else 0,
+                # 设置窗口尺寸
+                int(
+                    self.sel_wind_info_widgets['window_size']['obj'][1].text()
+                ) if match_int.match(
+                    self.sel_wind_info_widgets['window_size']['obj'][1].text()
+                ) else 0,
+                int(
+                    self.sel_wind_info_widgets['window_size']['obj'][3].text()
+                ) if match_int.match(
+                    self.sel_wind_info_widgets['window_size']['obj'][3].text()
+                ) else 0,
+                win32con.SWP_SHOWWINDOW   # 标志，用于更改窗口显示状态
+            )
+            win32gui.SetWindowText(self.select_hwnd, self.sel_wind_info_widgets['window_title']['obj'][0].text())  # 设置标题
+            # 设置后更新输入框，确保数据一致
+            self.update_input_box()
+    
+    def update_input_box(self):
+        '''更新输入框'''
+        left, top, right, bottom, width, height = self.get_pos(self.select_hwnd)
+        title = win32gui.GetWindowText(self.select_hwnd) # type: ignore
+        exe_file_path = self.select_obj.exe()
+        self.sel_wind_info_widgets['window_title']['obj'][0].setText(title)
+        self.sel_wind_info_widgets['window_title']['obj'][0].setEnabled(True)
+
+        self.sel_wind_info_widgets['window_exe']['obj'].setText(exe_file_path)
+
+        self.sel_wind_info_widgets['window_pos']['obj'][1].setText(str(left))
+        self.sel_wind_info_widgets['window_pos']['obj'][1].setEnabled(True)
+        self.sel_wind_info_widgets['window_pos']['obj'][3].setText(str(top))
+        self.sel_wind_info_widgets['window_pos']['obj'][3].setEnabled(True)
+
+        self.sel_wind_info_widgets['window_size']['obj'][1].setText(str(width))
+        self.sel_wind_info_widgets['window_size']['obj'][1].setEnabled(True)
+        self.sel_wind_info_widgets['window_size']['obj'][3].setText(str(height))
+        self.sel_wind_info_widgets['window_size']['obj'][3].setEnabled(True)
+
+        self.sel_wind_info_widgets['process_pid']['obj'].setText(str(self.select_pid))
+        self.sel_wind_info_widgets['process_hwnd']['obj'].setText(str(self.select_hwnd))
 
     def slot_of_start_get_window_button(self):
         '''开始获取窗口信息'''
@@ -408,9 +568,7 @@ class MainWindow(QWidget):
 
     def get_pos(self, hwnd):
         '''获取窗口位置信息'''
-        left, top, right, bottom = win32gui.GetWindowRect(hwnd)
-        width, height = right - left, bottom - top
-        return left, top, right, bottom, width, height
+        return get_window_pos_and_size(hwnd)
 
     def slot_of_update_selected_window_info(self):
         try:
@@ -680,7 +838,11 @@ class AboutWindow(QDialog):
                 lambda: webbrowser.open('https://space.bilibili.com/3546756394518735')
             ],
             [
-                '软件下载链接(123网盘)',
+                '软件 github',
+                lambda: webbrowser.open('https://github.com/zuishuai-ziyi/WindowTool')
+            ],
+            [
+                '123网盘下载链接',
                 lambda: webbrowser.open('https://www.123865.com/s/iRadvd-DJQ0v')
             ]
         ]
@@ -705,7 +867,7 @@ def run_again_as_admin() -> None:
         return
     # 请求UAC提权
     if ctypes.windll.shell32.ShellExecuteW(
-        None, "runas", sys.executable, " ".join(sys.argv), None, not hasattr(sys, 'frozen') # hasattr(sys, 'frozen') -> 是否在打包后的环境中 此处最后一个参数的值影响提权后命令窗口是否显示，0为不显示 ⚠️当参数为0时，Windows会阻止子窗口渲染，导致所有Qt控件失效 但不影响打包结果⚠️
+        None, "runas", sys.executable, " ".join(sys.argv), None, not hasattr(sys, 'frozen') # hasattr(sys, 'frozen') -> 是否在打包后的环境中 此处最后一个参数的值影响提权后命令窗口是否显示，0为不显示 ⚠️当参数为0时，Windows会阻止子窗口渲染，导致所有Qt窗口失效 但不影打包为【单文件】的程序⚠️
     ) <= 32:
         show_buttonbox(run_app_exec=True, button_texts=("确定", ), tip_text="提升权限失败，程序终止", title="错误", window_size=(500, 309))
         print("提升权限失败，程序终止")
@@ -716,6 +878,14 @@ def get_file_path(file_path: str):
     """获取资源文件实际绝对路径"""
     return os.path.join(sys._MEIPASS if hasattr(sys, '_MEIPASS') else os.path.abspath("."), file_path) # type: ignore
 
+
+def exit_the_app(code: int = 0) -> NoReturn:
+    '''退出程序'''
+    # 释放资源
+    if main_window.observe_obj and main_window.observe_obj.is_observing():
+        # 停止观察
+        main_window.observe_obj.stop()
+    os._exit(code)
 
 
 if __name__ == "__main__":
@@ -730,13 +900,12 @@ if __name__ == "__main__":
         app = QApplication(sys.argv)
         main_window = MainWindow()
         main_window.show()
-        app.exec()
+        exit_the_app(app.exec())
     except:
         print(traceback.format_exc())
         if hasattr(sys, 'frozen'):
             # 若为打包结果，则忽略异常
-            os._exit(0)
-        import time
+            exit_the_app()
         while 1:
             time.sleep(0.5)
 

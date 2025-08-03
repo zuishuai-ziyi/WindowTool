@@ -38,3 +38,9 @@ def get_top_window_under_mouse(exclude_hwnds: list[int] | None = None) -> tuple[
     top_hwnd = parent
     pid = win32process.GetWindowThreadProcessId(top_hwnd)[1]
     return (pid, top_hwnd)
+
+def get_window_pos_and_size(hwnd) -> tuple[int, int, int, int, int, int]:
+        '''获取窗口位置和尺寸信息 返回值格式：left, top, right, bottom, width, height'''
+        left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+        width, height = right - left, bottom - top
+        return left, top, right, bottom, width, height
