@@ -856,15 +856,14 @@ class AboutWindow(QDialog):
         self.setLayout(self.main_layout)
 
 
+def is_admin() -> bool:
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin() != 0
+    except:
+        return False
+    
 def run_again_as_admin() -> None:
     '''以管理员身份重新运行当前程序'''
-    def is_admin() -> Any | Literal[False]:
-        try:
-            return ctypes.windll.shell32.IsUserAnAdmin()
-        except:
-            return False
-    if is_admin():
-        return
     # 请求UAC提权
     if ctypes.windll.shell32.ShellExecuteW(
         None, "runas", sys.executable, " ".join(sys.argv), None, not hasattr(sys, 'frozen') # hasattr(sys, 'frozen') -> 是否在打包后的环境中 此处最后一个参数的值影响提权后命令窗口是否显示，0为不显示 ⚠️当参数为0时，Windows会阻止子窗口渲染，导致所有Qt窗口失效 但不影打包为【单文件】的程序⚠️
@@ -890,7 +889,8 @@ def exit_the_app(code: int = 0) -> NoReturn:
 
 if __name__ == "__main__":
     try:
-        run_again_as_admin()
+        if not is_admin():
+            run_again_as_admin()
         # 读取配置文件
         try:
             profile_obj = ProfileShellClass(get_file_path("data\\profile\\data.yaml"))
