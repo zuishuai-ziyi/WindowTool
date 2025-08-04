@@ -1,3 +1,4 @@
+import subprocess
 from run_dialog import RunFileDlg
 from transparent_overlay_window import TransparentOverlayWindow as TOW
 from PyQt5.QtWidgets import QApplication, QMessageBox, QWidget, QVBoxLayout, QGridLayout, QLabel, QPushButton, QFormLayout, QHBoxLayout, QDialog, QLineEdit, QCheckBox, QSizePolicy
@@ -259,8 +260,11 @@ class MainWindow(QWidget):
             ],
             [
                 QPushButton('运行源文件'),
-                lambda: os.startfile(self.select_obj.exe()) if self.select_obj else print('未选中窗口'),
-                {'need': {'pid': False, 'hwnd': False}}
+                lambda pid, hwnd: os.startfile(self.select_obj.exe()) if self.select_obj else print('未选中窗口'),
+            ],
+            [
+                QPushButton('打开源文件所在位置'),
+                lambda pid, hwnd: subprocess.Popen(f'explorer /select,"{self.select_obj.exe()}"') if self.select_obj else print('未选中窗口'),
             ],
             [
                 QPushButton('(取消)挂起所选进程'),
@@ -337,7 +341,7 @@ class MainWindow(QWidget):
                         else:
                             raise TypeError(f"处理 {item} 时发生错误：给定的列表长度为 {len(item)} 应为 2 或 3")
                     except Exception:
-                        print("发生错误：", traceback.format_exc())
+                        print("[ERROR] 处理槽函数时发生错误：", traceback.format_exc())
                         return None
                 return res_func
             item[0].clicked.connect(make_slot(item[1], item)) # type: ignore
