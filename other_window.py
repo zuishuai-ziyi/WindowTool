@@ -110,7 +110,7 @@ class input_box_window(QDialog):
 
 
 MessageBox = \
-    lambda parent, top_info, info, title='提示', icon=QMessageBox.Information, buttons=("确定", ): (
+    lambda parent, top_info, info='', title='提示', icon=QMessageBox.Information, buttons=("确定", ): (
         mes := QMessageBox(parent),
         mes.addButton(QPushButton(buttons[0]), QMessageBox.ActionRole),
         (mes.addButton(QPushButton(button)) for button in buttons[1:]) if len(buttons) > 1 else None,
@@ -136,8 +136,10 @@ if __name__ == '__main__':
     #     button_click_callback = a,
     # ).exec_()
     window = MessageBox(
+        parent=None,
         title='这是标题',
-        info_text='这是一个输入框',
+        top_info='这是顶部信息',
+        info='这是一个输入框',
         buttons=('确定', '取消'),
     )
     window.show()

@@ -1,4 +1,4 @@
-import win32gui, win32api, win32process, win32con
+import win32gui, win32api, win32process, win32con, os, sys
 
 def get_top_window_under_mouse(exclude_hwnds: list[int] | None = None) -> tuple[int, int]:
     '''获取鼠标处顶层窗口PID及句柄'''
@@ -44,3 +44,7 @@ def get_window_pos_and_size(hwnd) -> tuple[int, int, int, int, int, int]:
         left, top, right, bottom = win32gui.GetWindowRect(hwnd)
         width, height = right - left, bottom - top
         return left, top, right, bottom, width, height
+
+def get_file_path(file_path: str):
+    """获取资源文件实际绝对路径"""
+    return os.path.join(sys._MEIPASS if hasattr(sys, '_MEIPASS') else os.path.abspath("."), file_path) # type: ignore
