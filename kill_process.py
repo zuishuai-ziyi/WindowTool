@@ -55,8 +55,6 @@ def kill_process(pid: int, Nt_first: bool = False) -> bool:
         bool:
             目标进程是否终止成功
     """
-    if not platform.machine().endswith('64'):
-        return False
     if Nt_first:
         # 若指定，则优先使用 NtTerminateProcess
         if kill_process_with_NtTerminate(pid):
