@@ -1,7 +1,6 @@
 import os, yaml
-from enum import IntEnum, auto
-from typing import Any, Self, Dict, List, Type, NoReturn, Iterable, Callable, TypeVar
-from pathlib import Path
+from typing import Any
+
 DEFAULT_CONFIG = {
     "set_up": {
         "keep_work_time": -1.0,
@@ -10,7 +9,7 @@ DEFAULT_CONFIG = {
     }
 }
 
-class profile:
+class Profile:
     def __init__(self, profile_path, /) -> None:
         # 验证并设置属性
         self.profile_path = profile_path
@@ -18,8 +17,9 @@ class profile:
             print(f"[INFO]  文件 {profile_path} 不存在，正在创建")
             self.create()
 
-OperationData = Dict[str, Any]
-'''操作的数据'''
+    def __enter__(self):
+        # 进入 with 块时，返回自身
+        return self
 
     def __exit__(self, *args) -> None:
         return None
@@ -66,65 +66,6 @@ OperationData = Dict[str, Any]
         with open(self.profile_path, 'w+', encoding='utf-8') as f:
             data[key] = value
             yaml.dump(data, f)
-        if self.callback and using_callback:
-            self.callback(OperationType.SET_ITEM, {"key": key, "new_value": value})
-        return
-
-    def set_all(self, data, *, file_path: None | str = None, using_callback: bool = True):
-        '''设置配置文件内容'''
-        path = self._get_file_path_or_raise_err(file_path)
-        with open(path, 'w+', encoding='utf-8') as f:
-            yaml.dump(data, f)
-        if self.callback and using_callback:
-            self.callback(OperationType.SET_ALL, {"new_value": data})
-        return
-
-    def set_default(self, data: Dict[str, Any]):
-        '''设置配置文件默认值'''
-        self.default = data
-        return
-
-    def check_file(self, data: Dict[str, Type[Any] | Any] | None = None, using_default: bool | None = None) -> bool:
-        '''检查配置文件内容是否与给定数据或默认值相同'''
-        if not self.file_exists():
-            return False
-        _data = self.default if data is None else data
-        using_default = data is None
-        try:
-            file_data = self.get()
-            return self._check_iterable(file_data, _data, using_default)
-        except Exception:
-            return False
-
-    def _check_iterable(self, obj1: Iterable, obj2: Iterable, using_default: bool) -> bool:
-        # print('check ', obj1, obj2, isinstance(obj1, dict), isinstance(obj2, dict), using_default)
-        # 字典
-        if isinstance(obj1, dict) and isinstance(obj2, dict):
-            return self._check_dict(obj1, obj2, using_default)
-        if (not isinstance(obj1, Iterable)) or (not isinstance(obj2, Iterable)):
-            return False
-        # 其他可迭代对象
-        try:
-            for elem1, elem2 in zip(obj1, obj2, strict=True):  # strict=True 确保长度相等
-                if using_default and ((not isinstance(elem2, Iterable)) or isinstance(elem2, str)):
-                    # 使用默认值，获取值的类型
-                    elem2 = type(elem2)
-                # print('list fot iterable check ', elem1, elem2, using_default, isinstance(elem2, Iterable), isinstance(elem2, str))
-                # print('list for ', elem1, elem2)
-                if isinstance(elem2, Iterable):
-                    # d2包含可迭代对象，检查d1
-                    if not isinstance(elem1, Iterable):
-                        return False
-                    # 递归检查
-                    # print(f'递归检查 {elem1}, {elem2}, {type(elem1)}, {type(elem2)}')
-                    if not self._check_iterable(elem1, elem2, using_default):
-                        return False
-                    continue
-                # print(elem1, elem2)
-                if not isinstance(elem1, elem2):
-                    return False
-        except ValueError:  # 长度不相等，返回 False
-            return False
         return True
     
     def write(self, d: dict) -> None:
@@ -134,73 +75,62 @@ OperationData = Dict[str, Any]
             yaml.dump(d, f)
         return None
 
-    def create(self, data: Dict[str, Any], *, using_callback: bool = True):
-        '''创建配置文件'''
-        if self.callback and using_callback:
-            self.callback(OperationType.CREATE, {"path": self.file, "new_value": data})
-        with open(self.file, 'a+', encoding='utf-8') as f:
-            yaml.dump(data, f)
-        return
 
-    def file_exists(self) -> bool:
-        '''检查配置文件是否存在'''
-        return self.file.exists()
+class ProfileShell:
+    def __init__(self, profile_path: str) -> None:
+        self.profile_path_obj = Profile(profile_path)
+        self.default_data: dict[str, Any] = {}
+    
+    def register(self, key: str, default_value: Any):
+        '''注册键的默认值'''
+        self.default_data[key] = default_value
+    
+    def unregister(self, key: str):
+        '''取消注册键的默认值'''
+        del self.default_data[key]
 
-    def _get_file_path_or_raise_err(self, file: None | str = None) -> str | NoReturn:
-        '''检查配置文件/给定文件是否存在并获取，若不存在则抛出异常'''
-        path = str(self.file) if file is None else file
-        if os.path.exists(path):
-            return path
-        raise FileNotFoundError(f"文件 {self.file} 不存在")
+    def __getitem__(self, key) -> Any:
+        default = object()
+        data: object | dict = t if isinstance(t := self.profile_path_obj.get(), dict) else default
+        if data == default:
+            # 不存在目标键或数据类型错误，返回注册的默认值
+            return self.default_data[key] if key in self.default_data else None
+        dict_data: Any = data.get(key, default)  # type: ignore # 获取数据
+        # 存在目标键，返回目标键对应值
+        return dict_data
     
-    def __getitem__(self, key):
-        return self.get(key)
+    def get(self, key, default = None) -> Any:
+        defa_obj = object()
+        data: object | dict = t if isinstance(t := self.profile_path_obj.get(), dict) else defa_obj
+        if data == defa_obj:
+            return default
+        return  data.get(key, default) # type: ignore
 
-    def __setitem__(self, key, value):
-        self.set(key, value)
-    
-    def __delitem__(self, key):
-        data = self.get(key)
-        del data[key]
-        self.set_all(data)
+    def __setitem__(self, key: str, value: Any) -> None:
+        try:
+            self.profile_path_obj.set(key, value)
+        except Exception as e:
+            print(f'[Error] 写入配置文件时出现错误：{e}')
+            raise
         return None
-    
-    def register_callback(self, callback: Callable[[OperationType, OperationData], Any]):
-        '''注册回调函数，当操作配置文件时调用'''
-        self.callback = callback
+
+    def __delitem__(self, key: str) -> None:
+        default = object()
+        data: object | dict = t if isinstance(t := self.profile_path_obj.get(), dict) else default
+        if data == default:
+            # 不存在目标键或数据类型错误，返回注册的默认值
+            print(f'[Warnning] 删除的目标键 {key} 不存在')
+            return None
+        new_profile_data: dict = data.get() # type: ignore
+        del new_profile_data[key]
+        self.profile_path_obj.write(new_profile_data)
         return None
-    
-    def unregister_callback(self):
-        '''注销回调函数'''
-        self.callback = None
-        return None
+
 
 if __name__ == '__main__':
-    obj = Profile('test.yaml')
-    obj.set_default({
-        'a': 1,
-        'b': 2,
-        'c': [
-          {
-            "name": "test",
-            "age": 18
-          },
-          10,
-          '1'
-        ]
-    })
-    res = obj.check_file(
-        # {
-        #     'a': int,
-        #     'b': int,
-        #     'c': [
-        #         {
-        #             'name': str,
-        #             'age': int
-        #         },
-        #         int,
-        #         int
-        #     ]
-        # }
-    )
-    print(res)
+    obj = ProfileShell('.\\test.yaml')
+    print(obj['a'])
+    obj['a'] = 5
+    print(obj['a'])
+    # del obj['a']
+    # print(obj['a'])

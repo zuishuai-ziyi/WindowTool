@@ -1,6 +1,0 @@
-set_up:
-  keep_work_time: -1.0
-  on_top_time: -1.0
-  show_error_box: true
-  show_info_box: true
-  show_warning_box: true

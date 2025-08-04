@@ -9,8 +9,8 @@ from buttonbox import main as show_buttonbox
 from kill_process import kill_process
 from delete_file import delete_file
 from suspend_process import suspend_process, resume_process
-from other_window import input_box_window, MessageBox
-from operation_profile import Profile as ProfileClass, OperationType, OperationData
+from other_window import input_box_window
+from operation_profile import ProfileShell as ProfileShellClass
 from observe_window import ObserveWindow
 from typing import Any, Dict, Literal, List, Callable, NoReturn, Iterable
 import sys, win32gui, win32con, win32process, psutil, keyboard, ctypes, os, traceback, pywintypes, time, threading, webbrowser, re
@@ -20,8 +20,6 @@ class MainWindow(QWidget):
     '''主窗口'''
     def __init__(self) -> None:
         super().__init__()
-        # 注册配置文件回调函数
-        profile_obj.register_callback(self.slot_of_profile_callback)
 
         # 创建计时器，用于更新选中窗口信息
         self.update_sele_wind_timer = QTimer(self)
@@ -29,17 +27,6 @@ class MainWindow(QWidget):
         # 创建计时器，用于更新窗口
         self.update_window_timer = QTimer(self)
         self.update_window_timer.timeout.connect(self.slot_of_update_window)
-        # 创建计时器组，用于更新窗口属性
-        self.update_window_attribute_timers = {
-            "on_top": (
-                obj := QTimer(self),
-                obj.timeout.connect(self.slot_of_update_on_top)
-            )[0],
-            "keep_work": (
-                obj := QTimer(self),
-                obj.timeout.connect(self.slot_of_update_keep_work)
-            )[0],
-        }
 
         # 初始化蒙版属性
         self.init_overlay_attribute()
@@ -220,31 +207,13 @@ class MainWindow(QWidget):
         def _set_attribute(dict_obj: Dict, key: str, value: Any) -> None:
             '''设置属性'''
             dict_obj[key] = value
-        def _show_message_box(success: bool, code: int | None = None):
-            if success and profile_obj['set_up']['show_info_box']:
-                MessageBox(
-                    self,
-                    "操作成功完成",
-                    '',
-                    title="提示",
-                    icon=QMessageBox.Information,
-                    buttons=("确定", )
-                )
-            elif profile_obj['set_up']['show_error_box']:
-                MessageBox(
-                    self,
-                    "尝试执行操作时发生错误",
-                    '' if code is None else f'错误代码: {code}',
-                    title="错误",
-                    icon=QMessageBox.Critical, buttons=("确定", )
-                )
         max_len_for_1_line = 3  # 单行最大控件数
         dos_buttons: List[List[QPushButton | Callable | Dict[Literal['need'], Dict[Literal['pid'] | Literal['hwnd'], bool]]]] = [
             [
                 QPushButton('结束所选进程'),
                 lambda pid, hwnd: (
                     kill_process(pid),
-                    (MessageBox(self, "已发送终止信号至进程", f'进程PID: {pid}', icon=QMessageBox.Information) if profile_obj['set_up']['show_info_box'] else None)
+                    print(f"已发送终止信号至进程 PID: {pid}")
                 )
             ],
             [
@@ -271,47 +240,23 @@ class MainWindow(QWidget):
             ],
             [
                 QPushButton('窗口最小化'),
-                lambda pid, hwnd: (
-                    res := win32gui.ShowWindow(hwnd, win32con.SW_MINIMIZE),
-                    _show_message_box(True, res),
-                )
+                lambda pid, hwnd: win32gui.ShowWindow(hwnd, win32con.SW_MINIMIZE)
             ],
             [
                 QPushButton('窗口最大化'),
-                lambda pid, hwnd: (
-                    res := win32gui.ShowWindow(hwnd, win32con.SW_MAXIMIZE),
-                    _show_message_box(True, res),
-                )
+                lambda pid, hwnd: win32gui.ShowWindow(hwnd, win32con.SW_MAXIMIZE)
             ],
             [
-                QPushButton('恢复窗口显示状态'),
-                lambda pid, hwnd: (
-                    res := win32gui.ShowWindow(hwnd, win32con.SW_RESTORE),
-                   _show_message_box(True, res),
-                )
+                QPushButton('恢复窗口大小'),
+                lambda pid, hwnd: win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
             ],
             [
                 QPushButton('隐藏/显示'),
-                lambda pid, hwnd:(
-                    res :=  win32gui.ShowWindow(
+                lambda pid, hwnd:
+                    win32gui.ShowWindow(
                         hwnd,
                         win32con.SW_HIDE if win32gui.IsWindowVisible(hwnd) else win32con.SW_SHOW
-                    ),
-                    _show_message_box(True, res),
-                )
-            ],
-            [
-                QPushButton('(取消)置顶窗口'),
-                lambda pid, hwnd: (
-                    window_is_on_top := bool(win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE) & win32con.WS_EX_TOPMOST),
-                    win32gui.SetWindowPos(
-                        hwnd,
-                        win32con.HWND_NOTOPMOST if window_is_on_top else win32con.HWND_TOPMOST,
-                        0, 0, 0, 0,
-                        win32con.SWP_NOMOVE | win32con.SWP_NOSIZE
-                    ),
-                    _show_message_box(True, None),
-                )
+                    )
             ],
             [
                 QPushButton('运行源文件'),
@@ -325,18 +270,14 @@ class MainWindow(QWidget):
                 QPushButton('(取消)挂起所选进程'),
                 lambda pid, hwnd:
                     (
-                        res := resume_process(pid),
+                        resume_process(pid),
                         _set_attribute(self.select_process_info, 'suspend', False),
-                        (MessageBox(self, "进程已从挂起中恢复", f'进程PID: {pid}', icon=QMessageBox.Information) if profile_obj['set_up']['show_info_box'] else None)
-                        if res else
-                        (MessageBox(self, "进程无法从挂起中恢复", f'进程PID: {pid}', icon=QMessageBox.Critical) if profile_obj['set_up']['show_error_box'] else None)
+                        print(f"已恢复进程 PID: {pid}")
                     ) if self.select_process_info['suspend']
                     else (
-                        res := suspend_process(pid),
+                        suspend_process(pid),
                         _set_attribute(self.select_process_info, 'suspend', True),
-                        (MessageBox(self, "已挂起进程", f'进程PID: {pid}', icon=QMessageBox.Information) if profile_obj['set_up']['show_info_box'] else None)
-                        if res else
-                        (MessageBox(self, "无法挂起进程", f'进程PID: {pid}', icon=QMessageBox.Critical) if profile_obj['set_up']['show_error_box'] else None)
+                        print(f"已挂起进程 PID: {pid}")
                     ),
             ],
             [
@@ -435,36 +376,25 @@ class MainWindow(QWidget):
         self.setLayout(self.super_layout)
 
         # 启动更新窗口计时器
-        self.update_window_timer.start(100)
-        # 启动更新属性状态计时器
-        self.stop_and_start_timer('on_top', 'on_top_time')
-        self.stop_and_start_timer('keep_work', 'keep_work_time')
+        self.update_window_timer.start(0)
 
     def set_window_border(self, hwnd, borderless: bool = True) -> None:
         '''设置窗口为无边框或恢复边框'''
-        if not self.IsWindow(hwnd):
-            print(f"当前窗口无效 HWND: {hwnd}")
-            return
-        try:
-            style = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE)
-            if borderless:
-                # 移除边框和标题栏
-                style &= ~win32con.WS_CAPTION
-                style &= ~win32con.WS_THICKFRAME
-            else:
-                # 恢复边框和标题栏
-                style |= win32con.WS_CAPTION
-                style |= win32con.WS_THICKFRAME
-            win32gui.SetWindowLong(hwnd, win32con.GWL_STYLE, style)
-            # 触发窗口刷新
-            win32gui.SetWindowPos(
-                hwnd, None, 0, 0, 0, 0,
-                win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOZORDER | win32con.SWP_FRAMECHANGED
-            )
-        except Exception:
-            print("发生错误:\n", traceback.format_exc())
-            MessageBox(self, "发生错误", traceback.format_exc(), title="错误", icon=QMessageBox.Critical, buttons=("确定", ))
-            return
+        style = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE)
+        if borderless:
+            # 移除边框和标题栏
+            style &= ~win32con.WS_CAPTION
+            style &= ~win32con.WS_THICKFRAME
+        else:
+            # 恢复边框和标题栏
+            style |= win32con.WS_CAPTION
+            style |= win32con.WS_THICKFRAME
+        win32gui.SetWindowLong(hwnd, win32con.GWL_STYLE, style)
+        # 触发窗口刷新
+        win32gui.SetWindowPos(
+            hwnd, None, 0, 0, 0, 0,
+            win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOZORDER | win32con.SWP_FRAMECHANGED
+        )
 
     def chose_window(self) -> None:
         '''已选择窗口'''
@@ -492,40 +422,23 @@ class MainWindow(QWidget):
         # 监测目标窗口尺寸/位置/标题变化
         self.observe_obj = ObserveWindow(self.select_hwnd, # type: ignore
             lambda old_info, new_info: (
+                # 更新设置状态，防止更新窗口位置
+                # _set_attribute(self.is_setting_input_box, ('title', 'pos', 'size'), True),
+                # 更新输入框文本
                 self.sel_wind_info_widgets['window_title']['obj'][0].setText(new_info['title']),
                 self.sel_wind_info_widgets['window_pos']['obj'][1].setText(str(new_info['pos'][0])),
                 self.sel_wind_info_widgets['window_pos']['obj'][3].setText(str(new_info['pos'][1])),
                 self.sel_wind_info_widgets['window_size']['obj'][1].setText(str(new_info['size'][0])),
                 self.sel_wind_info_widgets['window_size']['obj'][3].setText(str(new_info['size'][1])),
+                # 更新文本后重置设置状态
+                # _set_attribute(self.is_setting_input_box, ('title', 'pos', 'size'), False),
             ),
-            wait_time=0.1
+            wait_time=0
         )
         self.observe_obj.start()
         # 更改显示信息
         self.update_input_box()
-    
-    def slot_of_profile_callback(self, op_type: OperationType, data: OperationData):
-        '''配置文件回调函数'''
-        if op_type == OperationType.SET_ITEM:
-            # 设置键值对，检查是否更新计时器
-            if data['key'] == 'set_up' and isinstance(data['new_value'].get('on_top_time', None), (float, int)):
-                self.stop_and_start_timer('on_top', 'on_top_time')
-            if data['key'] == 'set_up' and isinstance(data['new_value'].get('keep_work_time', None), (float, int)):
-                self.stop_and_start_timer('keep_work', 'keep_work_time')
-        elif op_type == OperationType.SET_ALL:
-            self.stop_and_start_timer('on_top', 'on_top_time')
-            self.stop_and_start_timer('keep_work', 'keep_work_time')
-        else:
-            ...
 
-    def stop_and_start_timer(self, timer_name: str, profile_key: str, root_key: str = 'set_up', default_value: int = -1) -> None:
-        '''停止并按配置文件中的时间重新启动计时器'''
-        if self.update_window_attribute_timers.get(timer_name, None) is None:
-            raise KeyError(f"计时器 {timer_name} 不存在")
-        self.update_window_attribute_timers[timer_name].stop()
-        time = int(profile_obj.get(root_key, {profile_key: default_value}, using_callback = False).get(profile_key, default_value) * 1000)
-        if time >= 0:
-            self.update_window_attribute_timers[timer_name].start(time)
     def slot_of_setbutton(self):
         '''设置按钮槽函数'''
         # 创建设置窗口
@@ -548,29 +461,27 @@ class MainWindow(QWidget):
         '''关于按钮槽函数'''
         self.about_window = AboutWindow(self)
         self.about_window.exec_()
-    
-    def slot_of_update_on_top(self):
-        '''更新置顶状态'''
-        if profile_obj.get('set_up', {'on_top_time': -1}).get('on_top_time', -1) >= 0:
-            # 置顶
-            win32gui.SetWindowPos(
-                self.winId(), # 目标窗口 # type: ignore
-                win32con.HWND_TOPMOST, # 置顶的方式
-                0, 0, 0, 0,
-                win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE  # 置顶时，不移动，不改变大小，不激活窗口（不获取焦点）
-            )
-
-    def slot_of_update_keep_work(self):
-        '''更新保持工作状态'''
-        if profile_obj.get('set_up', {'keep_work_time': -1}).get('keep_work_time', -1) >= 0:
-            # 保持工作
-            self.show()
-            self.showNormal()
 
     def slot_of_update_window(self):
         '''更新窗口'''
         # 重绘窗口，防止恶意软件的特效覆盖
         self.update()
+        # 判断是否强制置顶
+        if 0 <= profile_obj.get('set_up', {'on_top_time': 0}).get('on_top_time', 0) <= time.time() - self.last_on_top_time:
+            # 重置时间
+            self.last_on_top_time = time.time()
+            # 置顶
+            win32gui.SetWindowPos(
+                self.winId(), # 指定窗口 # type: ignore
+                win32con.HWND_TOPMOST, # 置顶的方式
+                0, 0, 0, 0,
+                win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE  # 置顶时，不移动，不改变大小，不激活窗口（不获取焦点）
+            )
+        if 0 <= profile_obj.get('set_up', {'keep_work_time': 0}).get('keep_work_time', 0) <= time.time() - self.last_keep_work_time:
+            # 重置时间
+            self.last_keep_work_time = time.time()
+            # 恢复状态
+            self.showNormal()
         # 更新输入框
         select_is_window = self.IsWindow(self.select_hwnd)
 
@@ -622,7 +533,7 @@ class MainWindow(QWidget):
             self.update_input_box()
     
     def update_input_box(self):
-        '''更新输入框 调用时保证选中句柄有效'''
+        '''更新输入框'''
         left, top, right, bottom, width, height = self.get_pos(self.select_hwnd)
         title = win32gui.GetWindowText(self.select_hwnd) # type: ignore
         exe_file_path = self.select_obj.exe() # type: ignore
@@ -656,7 +567,7 @@ class MainWindow(QWidget):
             self.start_get_window_button.setText("开始获取")
             self.is_getting_info = False
         else:
-            self.update_sele_wind_timer.start(50)
+            self.update_sele_wind_timer.start(0)
             self.start_get_window_button.setText("停止获取")
             self.showMinimized()
             self.is_getting_info = True
@@ -989,31 +900,12 @@ if __name__ == "__main__":
         parser.add_argument('--hwnd', type=int, default=None, help='自动选中窗口句柄')
         args = parser.parse_args()
         # 读取配置文件
-
-        profile_obj = ProfileClass(get_file_path("data\\profile\\data.yaml"))
-        default_profile = \
-        {
-            'set_up': {
-                'on_top_time': -1.0,        # 强制置顶间隔时间
-                'keep_work_time': -1.0,     # 强制前台间隔时间
-                'show_info_box': True,     # 是否显示信息文本框
-                'show_warning_box': True,  # 是否显示警告文本框
-                'show_error_box': True,    # 是否显示错误文本框
-            }
-        }
-        # 设置默认值
-        profile_obj.set_default(default_profile)
-        if not profile_obj.check_file():
-            print("配置文件不存在或存在错误，尝试重置...")
-            if profile_obj.file_exists():
-                os.remove(get_file_path("data\\profile\\data.yaml"))
-            try:
-                profile_obj.create(default_profile)
-                print("重置成功")
-            except Exception as e:
-                print(f"重置配置文件时发生异常: {e}")
-                os._exit(0)
-
+        try:
+            profile_obj = ProfileShellClass(get_file_path("data\\profile\\data.yaml"))
+        except Exception as e:
+            print(f"配置文件加载失败: {e}")
+            os._exit(0)
+        # 创建应用程序实例
         app = QApplication(sys.argv)
         main_window = MainWindow()
         if args.hwnd:
@@ -1030,4 +922,4 @@ if __name__ == "__main__":
         while 1:
             time.sleep(0.5)
 
-# pyinstaller main.py --noconsole --add-data "data:data" -i ".\data\icon\window.png"
+# pyinstaller main.py --noconsole --add-data "data:data" -i "D:\_ziyi_home_\ziyi_home\文件\code\python\wowo\开发中\windows\data\icon\window.png"
