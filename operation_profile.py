@@ -1,24 +1,25 @@
-import os, yaml
-from typing import Any, Self, Dict, List, Type, NoReturn
+import os, yaml, copy
+from typing import Any, Self, Dict, List, Type, NoReturn, Iterable
 from pathlib import Path
 
-class profile:
+class Profile:
     def __init__(self, file_path: str) -> None:
         self.file = Path(file_path)
         self.default = {}
 
-    def get(self, *, file_path: None | str = None) -> Dict[str, Any]:
+    def get[T](self, key:str | None = None, default: None | T = None, *, file_path: None | str = None) -> T | Dict[str, Any]:
         '''获取配置文件内容'''
         path = self._get_file_path_or_raise_err(file_path)
         with open(path, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f)
-        return data
+        return data if key is None else data.get(key, default)
 
     def set(self, key: str, value: Any, *, file_path: None | str = None):
         '''更改配置文件置顶键值对的内容'''
         path = self._get_file_path_or_raise_err(file_path)
+        data = self.get()
         with open(path, 'w+', encoding='utf-8') as f:
-            data = self.get()
+            print(data)
             data[key] = value
             yaml.dump(data, f)
         return
@@ -35,13 +36,52 @@ class profile:
         self.default = data
         return
 
-    def cheak_file_with_data(self, data: Dict[str, Type[Any]]) -> bool:
+    def check_file_with_data(self, data: Dict[str, Type[Any] | Any]) -> bool:
         '''检查配置文件内容是否与给定数据相同'''
         if not self.file_exists():
             return False
         file_data = self.get()
-        for k, v in data.items():
-            if not isinstance(file_data.get(k, object()), v):
+        return self._check_iterable(file_data, data)
+
+    def _check_iterable(self, obj1: Iterable, obj2: Iterable) -> bool:
+        # 字典
+        if isinstance(obj1, dict) and isinstance(obj2, dict):
+            return self._check_dict(obj1, obj2)
+        if (not isinstance(obj1, Iterable)) or (not isinstance(obj2, Iterable)):
+            return False
+        # 其他可迭代对象
+        try:
+            for elem1, elem2 in zip(obj1, obj2, strict=True):  # strict=True 确保长度相等
+                if isinstance(elem2, Iterable):
+                    # d2包含可迭代对象，检查d1
+                    if not isinstance(elem1, Iterable):
+                        return False
+                    # 递归检查
+                    if not self._check_iterable(elem1, elem2):
+                        return False
+                    continue
+                # print(elem1, elem2)
+                if not isinstance(elem1, elem2):
+                    return False
+        except ValueError:  # 长度不相等，返回 False
+            return False
+        return True
+    
+    def _check_dict(self, d1: Dict[Any, Any], d2: Dict[Any, Any]) -> bool:
+        if d1.keys() != d2.keys():
+            return False
+        for k in d2:
+            v1, v2 = d1[k], d2[k]
+            if isinstance(v2, type):
+                # d2包含类型，直接检查类型是否正确
+                if not isinstance(v1, v2):
+                    return False
+            elif isinstance(v2, Iterable):
+                # d2包含可迭代对象，递归检查
+                if not self._check_iterable(v1, v2):
+                    return False
+            else:
+                # d2包含无效值
                 return False
         return True
 
@@ -61,3 +101,33 @@ class profile:
         if os.path.exists(path):
             return path
         raise FileNotFoundError(f"文件 {self.file} 不存在")
+    
+    def __getitem__(self, key):
+        return self.get(key)
+
+    def __setitem__(self, key, value):
+        self.set(key, value)
+    
+    def __delitem__(self, key):
+        data = self.get(key)
+        del data[key]
+        self.set_all(data)
+        return None
+
+if __name__ == '__main__':
+    obj = Profile('test.yaml')
+    res = obj.check_file_with_data(
+        {
+            'a': int,
+            'b': int,
+            'c': [
+                {
+                    'name': str,
+                    'age': int
+                },
+                int,
+                str
+            ]
+        }
+    )
+    print(res)

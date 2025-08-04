@@ -4,11 +4,11 @@ from PyQt5.QtGui import QCloseEvent, QIcon, QDoubleValidator, QRegExpValidator
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QRegExp
 from api import get_top_window_under_mouse, get_window_pos_and_size
 from buttonbox import main as show_buttonbox
-from kill_process import kill_process, kill_process_with_NtTerminate, kill_process_with_terminate
+from kill_process import kill_process
 from delete_file import delete_file
-from suspend_process import suspend_process, suspend_process_with_NtSuspendProcess, suspend_process_with_psutil_lib, resume_process, resume_process_with_NtResumeProcess, resume_process_with_psutil_lib
+from suspend_process import suspend_process, resume_process
 from other_window import input_box_window
-from operation_profile import ProfileShell as ProfileShellClass
+from operation_profile import Profile as ProfileClass
 from observe_window import ObserveWindow
 from typing import Any, Dict, Literal, List, Callable, Never, NoReturn, Iterable
 import sys, win32gui, win32con, psutil, keyboard, ctypes, os, traceback, pywintypes, time, threading, webbrowser, functools, re
@@ -25,6 +25,9 @@ class MainWindow(QWidget):
         # 创建计时器，用于更新窗口
         self.update_window_timer = QTimer(self)
         self.update_window_timer.timeout.connect(self.slot_of_update_window)
+        # 创建计时器，用于更新窗口置顶状态
+        self.update_on_top_timer = QTimer(self)
+        self.update_on_top_timer.timeout.connect(self.slot_of_update_on_top)
 
         # 初始化蒙版属性
         self.init_overlay_attribute()
@@ -249,6 +252,18 @@ class MainWindow(QWidget):
                     )
             ],
             [
+                QPushButton('(取消)置顶窗口'),
+                lambda pid, hwnd: (
+                    window_is_on_top := bool(win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE) & win32con.WS_EX_TOPMOST),
+                    win32gui.SetWindowPos(
+                        hwnd,
+                        win32con.HWND_NOTOPMOST if window_is_on_top else win32con.HWND_TOPMOST,
+                        0, 0, 0, 0,
+                        win32con.SWP_NOMOVE | win32con.SWP_NOSIZE
+                    )
+                )
+            ],
+            [
                 QPushButton('运行源文件'),
                 lambda: os.startfile(self.select_obj.exe()) if self.select_obj else print('未选中窗口'),
                 {'need': {'pid': False, 'hwnd': False}}
@@ -370,6 +385,8 @@ class MainWindow(QWidget):
 
         # 启动更新窗口计时器
         self.update_window_timer.start(0)
+        # 启动更新置顶状态计时器
+        self.update_on_top_timer.start(profile_obj.get('set_up', {'on_top_time': -1}).get('on_top_time', -1))
 
     def set_window_border(self, hwnd, borderless: bool = True) -> None:
         '''设置窗口为无边框或恢复边框'''
@@ -411,25 +428,13 @@ class MainWindow(QWidget):
         self.select_obj = psutil.Process(self.select_pid)
         self.select_process_info['suspend'] = False
         # 监测目标窗口尺寸/位置/标题变化
-        def _set_attribute(dict_obj: Dict, keys: str | Iterable[str], value: Any) -> None:
-            '''设置 给定字典的所有给定属性为给定值'''
-            if isinstance(keys, str):
-                dict_obj[keys] = value
-                return
-            for key in keys:
-                dict_obj[key] = value
         self.observe_obj = ObserveWindow(self.select_hwnd, # type: ignore
             lambda old_info, new_info: (
-                # 更新设置状态，防止更新窗口位置
-                # _set_attribute(self.is_setting_input_box, ('title', 'pos', 'size'), True),
-                # 更新输入框文本
                 self.sel_wind_info_widgets['window_title']['obj'][0].setText(new_info['title']),
                 self.sel_wind_info_widgets['window_pos']['obj'][1].setText(str(new_info['pos'][0])),
                 self.sel_wind_info_widgets['window_pos']['obj'][3].setText(str(new_info['pos'][1])),
                 self.sel_wind_info_widgets['window_size']['obj'][1].setText(str(new_info['size'][0])),
                 self.sel_wind_info_widgets['window_size']['obj'][3].setText(str(new_info['size'][1])),
-                # 更新文本后重置设置状态
-                # _set_attribute(self.is_setting_input_box, ('title', 'pos', 'size'), False),
             ),
             wait_time=0
         )
@@ -459,6 +464,17 @@ class MainWindow(QWidget):
         '''关于按钮槽函数'''
         self.about_window = AboutWindow(self)
         self.about_window.exec_()
+    
+    def slot_of_update_on_top(self):
+        '''更新置顶状态'''
+        if profile_obj.get('set_up', {'on_top_time': -1}).get('on_top_time', -1) >= 0:
+            # 置顶
+            win32gui.SetWindowPos(
+                self.winId(), # 目标窗口 # type: ignore
+                win32con.HWND_TOPMOST, # 置顶的方式
+                0, 0, 0, 0,
+                win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE  # 置顶时，不移动，不改变大小，不激活窗口（不获取焦点）
+            )
 
     def slot_of_update_window(self):
         '''更新窗口'''
@@ -526,15 +542,15 @@ class MainWindow(QWidget):
                 ) else 0,
                 win32con.SWP_SHOWWINDOW   # 标志，用于更改窗口显示状态
             )
-            win32gui.SetWindowText(self.select_hwnd, self.sel_wind_info_widgets['window_title']['obj'][0].text())  # 设置标题
+            win32gui.SetWindowText(self.select_hwnd, self.sel_wind_info_widgets['window_title']['obj'][0].text())  # type: ignore # 设置标题
             # 设置后更新输入框，确保数据一致
             self.update_input_box()
     
     def update_input_box(self):
-        '''更新输入框'''
+        '''更新输入框 调用时保证选中句柄有效'''
         left, top, right, bottom, width, height = self.get_pos(self.select_hwnd)
         title = win32gui.GetWindowText(self.select_hwnd) # type: ignore
-        exe_file_path = self.select_obj.exe()
+        exe_file_path = self.select_obj.exe() # type: ignore
         self.sel_wind_info_widgets['window_title']['obj'][0].setText(title)
         self.sel_wind_info_widgets['window_title']['obj'][0].setEnabled(True)
 
@@ -867,7 +883,7 @@ def run_again_as_admin() -> None:
         return
     # 请求UAC提权
     if ctypes.windll.shell32.ShellExecuteW(
-        None, "runas", sys.executable, " ".join(sys.argv), None, not hasattr(sys, 'frozen') # hasattr(sys, 'frozen') -> 是否在打包后的环境中 此处最后一个参数的值影响提权后命令窗口是否显示，0为不显示 ⚠️当参数为0时，Windows会阻止子窗口渲染，导致所有Qt窗口失效 但不影打包为【单文件】的程序⚠️
+        None, "runas", sys.executable, " ".join(sys.argv), None, 1 # not hasattr(sys, 'frozen') # hasattr(sys, 'frozen') -> 是否在打包后的环境中 此处最后一个参数的值影响提权后命令窗口是否显示，0为不显示 ⚠️当参数为0时，Windows会阻止子窗口渲染，导致所有Qt窗口失效 但不影打包为【单文件】的程序⚠️
     ) <= 32:
         show_buttonbox(run_app_exec=True, button_texts=("确定", ), tip_text="提升权限失败，程序终止", title="错误", window_size=(500, 309))
         print("提升权限失败，程序终止")
@@ -891,12 +907,33 @@ def exit_the_app(code: int = 0) -> NoReturn:
 if __name__ == "__main__":
     try:
         run_again_as_admin()
+
         # 读取配置文件
-        try:
-            profile_obj = ProfileShellClass(get_file_path("data\\profile\\data.yaml"))
-        except FileNotFoundError as e:
-            print(f"配置文件不存在: {e}")
-            os._exit(0)
+        profile_obj = ProfileClass(get_file_path("data\\profile\\data.yaml"))
+        default_profile = \
+        {
+            'set_up': {
+                'on_top_time': -1,    # 强制置顶间隔时间
+                'keep_work_time': -1  # 强制前台间隔时间
+            }
+        }
+        # 设置默认值
+        profile_obj.set_default(default_profile)
+        if not profile_obj.check_file_with_data({
+            'set_up': {
+                'on_top_time': int,    # 强制置顶间隔时间
+                'keep_work_time': int  # 强制前台间隔时间
+            }
+        }):
+            print("配置文件存在错误或不存在，尝试重置...")
+            if profile_obj.file_exists():
+                os.remove(get_file_path("data\\profile\\data.yaml"))
+            try:
+                profile_obj.create(default_profile)
+            except Exception as e:
+                print(f"创建配置文件失败: {e}")
+                os._exit(0)
+
         app = QApplication(sys.argv)
         main_window = MainWindow()
         main_window.show()
@@ -909,4 +946,4 @@ if __name__ == "__main__":
         while 1:
             time.sleep(0.5)
 
-# pyinstaller main.py --noconsole --add-data "data:data" -i "D:\_ziyi_home_\ziyi_home\文件\code\python\wowo\开发中\windows\data\icon\window.png"
+# pyinstaller main.py --noconsole --add-data "data:data" -i ".\data\icon\window.png"
