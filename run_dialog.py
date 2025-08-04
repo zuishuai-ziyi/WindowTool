@@ -1,4 +1,7 @@
 import ctypes
+from other_window import MessageBox
+from PyQt5.QtWidgets import QMessageBox
+from typing import Any
 
 # 正确定义函数原型
 kernel32 = ctypes.WinDLL('kernel32.dll', use_last_error=True)
@@ -21,7 +24,7 @@ func_address = GetProcAddress(shell32, ctypes.c_void_p(61))
 RunFileDlg_win32 = None
 
 # 将地址转换为函数指针
-if func_address:
+if not func_address:
     # 定义函数原型
     FUNCTYPE = ctypes.WINFUNCTYPE(
         ctypes.c_int,      # 返回值类型
@@ -36,11 +39,15 @@ if func_address:
     # 创建可调用的函数对象
     RunFileDlg_win32 = FUNCTYPE(func_address)
 
-    if __name__ == '__main__':
-        print(f"Function address: {hex(func_address)}")
 else:
     RunFileDlg_win32 = None
     print("Failed to get function address")
 
-def RunFileDlg(hwndOwner, hIcon, lpstrDirectory, lpstrTitle, lpstrDescription, uFlags):
-    return RunFileDlg_win32(int(hwndOwner), hIcon, lpstrDirectory, lpstrTitle, lpstrDescription, uFlags) # type: ignore
+def RunFileDlg(hwndOwner, hIcon, lpstrDirectory, lpstrTitle, lpstrDescription, uFlags) -> bool:
+    if RunFileDlg_win32 is None:
+        return False
+    RunFileDlg_win32(int(hwndOwner), hIcon, lpstrDirectory, lpstrTitle, lpstrDescription, uFlags)
+    return True
+
+if __name__ == '__main__':
+        print(f"Function address: {hex(func_address)}")
