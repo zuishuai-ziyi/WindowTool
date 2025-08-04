@@ -1,3 +1,9 @@
 myenv
 __pycache__
 data/profile/data.yaml
+# Pyinstaller files
+main.spec
+# Pyinstaller build directory
+dist
+# Pyinstaller temp directory
+build
