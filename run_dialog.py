@@ -24,7 +24,7 @@ func_address = GetProcAddress(shell32, ctypes.c_void_p(61))
 RunFileDlg_win32 = None
 
 # 将地址转换为函数指针
-if not func_address:
+if func_address:
     # 定义函数原型
     FUNCTYPE = ctypes.WINFUNCTYPE(
         ctypes.c_int,      # 返回值类型
