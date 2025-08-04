@@ -386,7 +386,7 @@ class MainWindow(QWidget):
         # 启动更新窗口计时器
         self.update_window_timer.start(0)
         # 启动更新置顶状态计时器
-        self.update_on_top_timer.start(profile_obj.get('set_up', {'on_top_time': -1}).get('on_top_time', -1))
+        self.update_on_top_timer.start(int(profile_obj.get('set_up', {'on_top_time': -1}).get('on_top_time', -1) * 1000))  # 转化为毫秒并取整
 
     def set_window_border(self, hwnd, borderless: bool = True) -> None:
         '''设置窗口为无边框或恢复边框'''
@@ -919,12 +919,7 @@ if __name__ == "__main__":
         }
         # 设置默认值
         profile_obj.set_default(default_profile)
-        if not profile_obj.check_file_with_data({
-            'set_up': {
-                'on_top_time': int,    # 强制置顶间隔时间
-                'keep_work_time': int  # 强制前台间隔时间
-            }
-        }):
+        if not profile_obj.check_file():
             print("配置文件存在错误或不存在，尝试重置...")
             if profile_obj.file_exists():
                 os.remove(get_file_path("data\\profile\\data.yaml"))

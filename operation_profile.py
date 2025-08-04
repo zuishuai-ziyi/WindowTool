@@ -5,7 +5,7 @@ from pathlib import Path
 class Profile:
     def __init__(self, file_path: str) -> None:
         self.file = Path(file_path)
-        self.default = {}
+        self.default: Dict = {}
 
     def get[T](self, key:str | None = None, default: None | T = None, *, file_path: None | str = None) -> T | Dict[str, Any]:
         '''获取配置文件内容'''
@@ -19,7 +19,7 @@ class Profile:
         path = self._get_file_path_or_raise_err(file_path)
         data = self.get()
         with open(path, 'w+', encoding='utf-8') as f:
-            print(data)
+            # print(data)
             data[key] = value
             yaml.dump(data, f)
         return
@@ -31,33 +31,42 @@ class Profile:
             yaml.dump(data, f)
         return
 
-    def set_default(self, data):
+    def set_default(self, data: Dict[str, Any]):
         '''设置配置文件默认值'''
         self.default = data
         return
 
-    def check_file_with_data(self, data: Dict[str, Type[Any] | Any]) -> bool:
-        '''检查配置文件内容是否与给定数据相同'''
+    def check_file(self, data: Dict[str, Type[Any] | Any] | None = None, using_default: bool | None = None) -> bool:
+        '''检查配置文件内容是否与给定数据或默认值相同'''
         if not self.file_exists():
             return False
+        _data = self.default if data is None else data
+        using_default = data is None
         file_data = self.get()
-        return self._check_iterable(file_data, data)
+        return self._check_iterable(file_data, _data, using_default)
 
-    def _check_iterable(self, obj1: Iterable, obj2: Iterable) -> bool:
+    def _check_iterable(self, obj1: Iterable, obj2: Iterable, using_default: bool) -> bool:
+        # print('check ', obj1, obj2, isinstance(obj1, dict), isinstance(obj2, dict), using_default)
         # 字典
         if isinstance(obj1, dict) and isinstance(obj2, dict):
-            return self._check_dict(obj1, obj2)
+            return self._check_dict(obj1, obj2, using_default)
         if (not isinstance(obj1, Iterable)) or (not isinstance(obj2, Iterable)):
             return False
         # 其他可迭代对象
         try:
             for elem1, elem2 in zip(obj1, obj2, strict=True):  # strict=True 确保长度相等
+                if using_default and ((not isinstance(elem2, Iterable)) or isinstance(elem2, str)):
+                    # 使用默认值，获取值的类型
+                    elem2 = type(elem2)
+                # print('list fot iterable check ', elem1, elem2, using_default, isinstance(elem2, Iterable), isinstance(elem2, str))
+                # print('list for ', elem1, elem2)
                 if isinstance(elem2, Iterable):
                     # d2包含可迭代对象，检查d1
                     if not isinstance(elem1, Iterable):
                         return False
                     # 递归检查
-                    if not self._check_iterable(elem1, elem2):
+                    # print(f'递归检查 {elem1}, {elem2}, {type(elem1)}, {type(elem2)}')
+                    if not self._check_iterable(elem1, elem2, using_default):
                         return False
                     continue
                 # print(elem1, elem2)
@@ -67,18 +76,24 @@ class Profile:
             return False
         return True
     
-    def _check_dict(self, d1: Dict[Any, Any], d2: Dict[Any, Any]) -> bool:
+    def _check_dict(self, d1: Dict[Any, Any], d2: Dict[Any, Any], using_default: bool) -> bool:
+        # print('dict check ', d1, d2)
         if d1.keys() != d2.keys():
             return False
         for k in d2:
             v1, v2 = d1[k], d2[k]
+            if using_default and ((not isinstance(v2, Iterable)) or isinstance(v2, str)):
+                # 使用默认值，获取值的类型
+                v2 = type(v2)
+            # print('dict for ', v1, v2)
             if isinstance(v2, type):
+                # print('check dict for type ', v1, v2)
                 # d2包含类型，直接检查类型是否正确
                 if not isinstance(v1, v2):
                     return False
             elif isinstance(v2, Iterable):
                 # d2包含可迭代对象，递归检查
-                if not self._check_iterable(v1, v2):
+                if not self._check_iterable(v1, v2, using_default):
                     return False
             else:
                 # d2包含无效值
@@ -116,18 +131,30 @@ class Profile:
 
 if __name__ == '__main__':
     obj = Profile('test.yaml')
-    res = obj.check_file_with_data(
-        {
-            'a': int,
-            'b': int,
-            'c': [
-                {
-                    'name': str,
-                    'age': int
-                },
-                int,
-                str
-            ]
-        }
+    obj.set_default({
+        'a': 1,
+        'b': 2,
+        'c': [
+          {
+            "name": "test",
+            "age": 18
+          },
+          10,
+          '1'
+        ]
+    })
+    res = obj.check_file(
+        # {
+        #     'a': int,
+        #     'b': int,
+        #     'c': [
+        #         {
+        #             'name': str,
+        #             'age': int
+        #         },
+        #         int,
+        #         int
+        #     ]
+        # }
     )
     print(res)
