@@ -765,20 +765,20 @@ class SetUpWindow(QDialog):
         self.on_top_time_input_box = QLineEdit()
         self.on_top_time_input_box.setValidator(QDoubleValidator(-1, 60, 3))
         self.on_top_time_input_box.setText(str(self.set_up_datas["on_top_time"]))
-        self.on_top_time_input_box.textChanged.connect(self.solt_of_on_top_time_input_box)
+        self.on_top_time_input_box.textChanged.connect(self.slot_of_on_top_time_input_box)
         self.set_up_items_layout.addRow(QLabel("强制置顶间隔时间(s)"), self.on_top_time_input_box)
 
         # 添加 强制前台间隔时间 输入框
         self.keep_work_input_box = QLineEdit()
         self.keep_work_input_box.setValidator(QDoubleValidator(-1, 60, 3))
         self.keep_work_input_box.setText(str(self.set_up_datas["keep_work_time"]))
-        self.keep_work_input_box.textChanged.connect(self.solt_of_keep_work_input_box)
+        self.keep_work_input_box.textChanged.connect(self.slot_of_keep_work_input_box)
         self.set_up_items_layout.addRow(QLabel("强制前台间隔时间(s)"), self.keep_work_input_box)
 
         # 添加 窗口允许最小化 复选框
         self.allow_minimize_check_box = QCheckBox("窗口允许最小化")
         self.allow_minimize_check_box.setChecked(self.set_up_datas.get("allow_minimize", False))
-        self.allow_minimize_check_box.stateChanged.connect(self.solt_of_allow_minimize_check_box)
+        self.allow_minimize_check_box.stateChanged.connect(self.slot_of_allow_minimize_check_box)
         self.set_up_items_layout.addRow(self.allow_minimize_check_box)
 
         # 将 设置表单布局 添加至 主布局
@@ -788,31 +788,31 @@ class SetUpWindow(QDialog):
         self.main_layout.addStretch()
         # 添加 确认按钮 至 主布局
         self.ok_button = QPushButton("确定")
-        self.ok_button.clicked.connect(self.solt_of_ok_button)
+        self.ok_button.clicked.connect(self.slot_of_ok_button)
         self.main_layout.addWidget(self.ok_button)
 
         # 设置窗口布局
         self.setLayout(self.main_layout)
     
-    def solt_of_on_top_time_input_box(self) -> None:
+    def slot_of_on_top_time_input_box(self) -> None:
         try:
             self.set_up_datas['on_top_time'] = float(self.on_top_time_input_box.text())
         except ValueError:
             print("[WARN]  用户输入无效")
 
-    def solt_of_keep_work_input_box(self) -> None:
+    def slot_of_keep_work_input_box(self) -> None:
         try:
             self.set_up_datas['keep_work_time'] = float(self.keep_work_input_box.text())
         except ValueError:
             print("[WARN]  用户输入无效")
 
-    def solt_of_allow_minimize_check_box(self) -> None:
+    def slot_of_allow_minimize_check_box(self) -> None:
         try:
             self.set_up_datas['allow_minimize'] = self.allow_minimize_check_box.isChecked()
         except ValueError:
             print("[WARN]  复选框状态获取失败")
 
-    def solt_of_ok_button(self) -> None:
+    def slot_of_ok_button(self) -> None:
         '''确认按钮槽函数'''
         # 关闭窗口并保存更改
         self.signal_save.emit(

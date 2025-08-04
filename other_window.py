@@ -35,7 +35,7 @@ class input_box_window(QDialog):
         # 添加输入框
         self.input_box = QLineEdit(input_box_default_text)
         self.input_box.setPlaceholderText(input_box_tip)
-        self.input_box.textChanged.connect(functools.partial(self.solt_of_input_box))
+        self.input_box.textChanged.connect(functools.partial(self.slot_of_input_box))
         # 将 输入框 添加至 主布局
         self.main_layout.addWidget(self.input_box)
         # 添加弹簧
@@ -45,18 +45,18 @@ class input_box_window(QDialog):
         for button in buttons:
             button_obj = QPushButton(button)
             # 绑定槽函数
-            button_obj.clicked.connect(functools.partial(self.solt_of_buttons, button_obj))
+            button_obj.clicked.connect(functools.partial(self.slot_of_buttons, button_obj))
             self.buttons_layout.addWidget(button_obj)
         # 将 按钮布局 添加至 主布局
         self.main_layout.addLayout(self.buttons_layout)
         # 设置窗口布局
         self.setLayout(self.main_layout)
 
-    def solt_of_buttons(self, button_obj: QPushButton) -> None:
+    def slot_of_buttons(self, button_obj: QPushButton) -> None:
         print('点击', button_obj.text(), self.input_box.text(), id(self.button_click_callback))
         self.button_click_callback(self, button_obj, self.input_box)
     
-    def solt_of_input_box(self):
+    def slot_of_input_box(self):
         self.input_text_chang_callback(self, self.input_box)
 
     def closeEvent(self, a0: QCloseEvent) -> None:
