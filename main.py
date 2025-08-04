@@ -406,6 +406,12 @@ class MainWindow(QWidget):
         print(f"[LOG]   选中窗口句柄为：{chose_window_hwnd}")
         # 正常显示
         self.showNormal()
+        # 判断是否可以访问目标窗口
+        phandle = ctypes.windll.kernel32.OpenProcess(win32con.PROCESS_ALL_ACCESS, False, self.select_pid)
+        if not phandle:
+            print(f"[WARN]  无法访问目标窗口的进程，可能是权限不足或进程已结束")
+            if QMessageBox.warning(self, '无法访问进程', f'无法访问进程 PID: {self.select_pid}，是否提权？', QMessageBox.Yes | QMessageBox.No) == QMessageBox.Yes:
+                run_again_as_admin(self)
         # 更新数据
         self.select_obj = psutil.Process(self.select_pid)
         self.select_process_info['suspend'] = False
@@ -532,7 +538,7 @@ class MainWindow(QWidget):
 
         # 防止exe路径过长撑大窗口
         metrics = QFontMetrics(self.sel_wind_info_widgets['window_exe']['obj'].font())
-        max_show_len = 50
+        max_show_len = 49
         filepath_text = exe_file_path if len(exe_file_path) <= max_show_len else exe_file_path[:max_show_len] + '...'
         self.sel_wind_info_widgets['window_exe']['obj'].setText(filepath_text)
 
@@ -878,6 +884,8 @@ def run_again_as_admin(parent = None) -> None:
     ) <= 32:
         print("[ERROR] 提升权限失败!")
         QMessageBox.critical(parent, "错误", "提升权限失败!")
+    else:
+        sys.exit(0)
 
 
 def get_file_path(file_path: str):
