@@ -1,3 +1,4 @@
+from run_dialog import RunFileDlg
 from transparent_overlay_window import TransparentOverlayWindow as TOW
 from PyQt5.QtWidgets import QApplication, QMessageBox, QWidget, QVBoxLayout, QGridLayout, QLabel, QPushButton, QFormLayout, QHBoxLayout, QDialog, QLineEdit, QCheckBox, QSizePolicy
 from PyQt5.QtGui import QCloseEvent, QIcon, QDoubleValidator, QFontMetrics
@@ -278,7 +279,7 @@ class MainWindow(QWidget):
             [
                 QPushButton('运行外部程序'),
                 lambda: (
-                    win32com.client.Dispatch("Shell.Application").FileRun() # 打开标准“运行”对话框
+                    RunFileDlg(self.winId(), None, None, "运行", "子逸 将根据你所输入的名称，为你打开相应的程序、文件夹、文档或 Internet 资源。", 0)
                 ),
                 {'need': {'pid': False, 'hwnd': False}}
             ]
