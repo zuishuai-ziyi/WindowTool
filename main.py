@@ -1,5 +1,5 @@
 from transparent_overlay_window import TransparentOverlayWindow as TOW
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QGridLayout, QLabel, QPushButton, QFormLayout, QHBoxLayout, QDialog, QLineEdit, QCheckBox, QSizePolicy
+from PyQt5.QtWidgets import QApplication, QMessageBox, QWidget, QVBoxLayout, QGridLayout, QLabel, QPushButton, QFormLayout, QHBoxLayout, QDialog, QLineEdit, QCheckBox, QSizePolicy
 from PyQt5.QtGui import QCloseEvent, QIcon, QDoubleValidator
 from PyQt5.QtCore import QEvent, Qt, QTimer, pyqtSignal
 from api import get_top_window_under_mouse, get_window_pos_and_size
@@ -49,13 +49,10 @@ class MainWindow(QWidget):
         # 设置窗口位置和大小
         screen = app.primaryScreen().availableGeometry() # type: ignore
 
-        width, height = 1000, 618
+        width, height = 640, 480
         left, top = (screen.width()-width)//2, (screen.height()-height)//2
 
         self.setGeometry(left, top, width, height)
-
-        # 禁止调整大小
-        self.setFixedSize(self.size())
 
         self.IsWindow = lambda hwnd: isinstance(hwnd, int) and win32gui.IsWindow(hwnd)
         self.IsProcess = lambda pid: isinstance(pid, int) and psutil.pid_exists(pid)
@@ -64,7 +61,7 @@ class MainWindow(QWidget):
 
     def changeEvent(self, event: QEvent | None) -> None:
         if profile_obj.get('set_up').get('allow_minimize', True) == False:
-            if event and event.type() == QEvent.WindowStateChange:
+            if event and event.type() == QEvent.WindowStateChange: # type: ignore
                 if self.isMinimized() or self.isHidden():
                     self.showNormal() # 防止最小化
         return super().changeEvent(event)
@@ -296,8 +293,8 @@ class MainWindow(QWidget):
         ]
         if not is_admin():
             dos_buttons.append([
-                QPushButton('管理员权限'),
-                lambda: run_again_as_admin(),
+                QPushButton('获取管理员权限'),
+                lambda: run_again_as_admin(self),
                 {'need': {'pid': False, 'hwnd': False}}
             ])
         # 将 窗口操作控件 添加至 窗口操作布局
@@ -538,7 +535,7 @@ class MainWindow(QWidget):
                 ) else 0,
                 win32con.SWP_SHOWWINDOW   # 标志，用于更改窗口显示状态
             )
-            win32gui.SetWindowText(self.select_hwnd, self.sel_wind_info_widgets['window_title']['obj'][0].text())  # 设置标题
+            win32gui.SetWindowText(self.select_hwnd, self.sel_wind_info_widgets['window_title']['obj'][0].text())  # type: ignore # 设置标题
             # 设置后更新输入框，确保数据一致
             self.update_input_box()
     
@@ -546,7 +543,7 @@ class MainWindow(QWidget):
         '''更新输入框'''
         left, top, right, bottom, width, height = self.get_pos(self.select_hwnd)
         title = win32gui.GetWindowText(self.select_hwnd) # type: ignore
-        exe_file_path = self.select_obj.exe()
+        exe_file_path = self.select_obj.exe() # type: ignore
         self.sel_wind_info_widgets['window_title']['obj'][0].setText(title)
         self.sel_wind_info_widgets['window_title']['obj'][0].setEnabled(True)
 
@@ -886,14 +883,14 @@ def is_admin() -> bool:
     except:
         return False
     
-def run_again_as_admin() -> None:
+def run_again_as_admin(parent = None) -> None:
     '''以管理员身份重新运行当前程序'''
     # 请求UAC提权
     if ctypes.windll.shell32.ShellExecuteW(
         None, "runas", sys.executable, " ".join(sys.argv), None, not hasattr(sys, 'frozen') # hasattr(sys, 'frozen') -> 是否在打包后的环境中 此处最后一个参数的值影响提权后命令窗口是否显示，0为不显示 ⚠️当参数为0时，Windows会阻止子窗口渲染，导致所有Qt窗口失效 但不影打包为【单文件】的程序⚠️
     ) <= 32:
-        show_buttonbox(run_app_exec=False, button_texts=("确定", ), tip_text="提升权限失败，程序终止", title="错误", window_size=(500, 309))
-        print("提升权限失败!")
+        print("[ERROR] 提升权限失败!")
+        QMessageBox.critical(parent, "错误", "提升权限失败!")
 
 
 def get_file_path(file_path: str):
