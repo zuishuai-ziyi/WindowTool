@@ -14,7 +14,7 @@ from operation_profile import ProfileShell as ProfileShellClass
 from observe_window import ObserveWindow
 from typing import Any, Dict, Literal, List, Callable, NoReturn, Iterable
 import sys, win32gui, win32con, win32process, psutil, keyboard, ctypes, os, traceback, pywintypes, time, threading, webbrowser, re
-from uia import get_current_session_id, load_uia
+from uiaapi import get_current_session_id, load_uia
 
 
 class MainWindow(QWidget):
