@@ -12,7 +12,7 @@ from other_window import input_box_window
 from operation_profile import ProfileShell as ProfileShellClass
 from observe_window import ObserveWindow
 from typing import Any, Dict, Literal, List, Callable, NoReturn, Iterable
-import sys, win32gui, win32con, win32com.client, psutil, keyboard, ctypes, os, traceback, pywintypes, time, threading, webbrowser, re
+import sys, win32gui, win32con, win32process, psutil, keyboard, ctypes, os, traceback, pywintypes, time, threading, webbrowser, re
 
 
 class MainWindow(QWidget):
@@ -411,7 +411,7 @@ class MainWindow(QWidget):
         if not phandle:
             print(f"[WARN]  无法访问目标窗口的进程，可能是权限不足或进程已结束")
             if QMessageBox.warning(self, '无法访问进程', f'无法访问进程 PID: {self.select_pid}，是否提权？', QMessageBox.Yes | QMessageBox.No) == QMessageBox.Yes:
-                run_again_as_admin(self)
+                run_again_as_admin(self, f'--hwnd={self.select_hwnd}')
         # 更新数据
         self.select_obj = psutil.Process(self.select_pid)
         self.select_process_info['suspend'] = False
@@ -890,6 +890,11 @@ def exit_the_app(code: int = 0) -> NoReturn:
 
 if __name__ == "__main__":
     try:
+        import argparse
+        # 解析命令行参数
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--hwnd', type=int, default=None, help='自动选中窗口句柄')
+        args = parser.parse_args()
         # 读取配置文件
         try:
             profile_obj = ProfileShellClass(get_file_path("data\\profile\\data.yaml"))
@@ -899,6 +904,10 @@ if __name__ == "__main__":
         # 创建应用程序实例
         app = QApplication(sys.argv)
         main_window = MainWindow()
+        if args.hwnd:
+            main_window.select_hwnd = int(args.hwnd)
+            main_window.select_pid = win32process.GetWindowThreadProcessId(main_window.select_hwnd)[1]
+            main_window.chose_window()
         main_window.show()
         exit_the_app(app.exec())
     except:
