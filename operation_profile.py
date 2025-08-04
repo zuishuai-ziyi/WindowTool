@@ -4,7 +4,8 @@ from typing import Any
 DEFAULT_CONFIG = {
     "set_up": {
         "keep_work_time": -1.0,
-        "on_top_time": -1.0
+        "on_top_time": -1.0,
+        "allow_minimize": True
     }
 }
 

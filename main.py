@@ -1,7 +1,7 @@
 from transparent_overlay_window import TransparentOverlayWindow as TOW
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QGridLayout, QLabel, QPushButton, QFormLayout, QHBoxLayout, QDialog, QLineEdit, QSizePolicy
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QGridLayout, QLabel, QPushButton, QFormLayout, QHBoxLayout, QDialog, QLineEdit, QCheckBox, QSizePolicy
 from PyQt5.QtGui import QCloseEvent, QIcon, QDoubleValidator
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal
+from PyQt5.QtCore import QEvent, Qt, QTimer, pyqtSignal
 from api import get_top_window_under_mouse, get_window_pos_and_size
 from buttonbox import main as show_buttonbox
 from kill_process import kill_process
@@ -61,6 +61,13 @@ class MainWindow(QWidget):
         self.IsProcess = lambda pid: isinstance(pid, int) and psutil.pid_exists(pid)
 
         self.main_UI()
+
+    def changeEvent(self, event: QEvent | None) -> None:
+        if profile_obj.get('set_up').get('allow_minimize', True) == False:
+            if event and event.type() == QEvent.WindowStateChange:
+                if self.isMinimized() or self.isHidden():
+                    self.showNormal() # 防止最小化
+        return super().changeEvent(event)
 
     def main_UI(self) -> None:
         self.select_hwnd = None
@@ -402,15 +409,14 @@ class MainWindow(QWidget):
         '''已选择窗口'''
         # 判断句柄是否有效
         if not self.IsWindow(self.select_hwnd):
-            print(f'当前句柄“{self.select_hwnd}”无效')
+            print(f'[LOG]   当前句柄“{self.select_hwnd}”无效')
             return
         # 停止选择
         self.stop_get_info()
         self.init_overlay_attribute()
         # 输出状态
-        print("已选择窗口，尝试获取信息...")
         chose_window_hwnd = self.select_hwnd
-        print(f"选中窗口句柄为：{chose_window_hwnd}")
+        print(f"[LOG]   选中窗口句柄为：{chose_window_hwnd}")
         # 正常显示
         self.showNormal()
         # 更新数据
@@ -769,6 +775,12 @@ class SetUpWindow(QDialog):
         self.keep_work_input_box.textChanged.connect(self.solt_of_keep_work_input_box)
         self.set_up_items_layout.addRow(QLabel("强制前台间隔时间(s)"), self.keep_work_input_box)
 
+        # 添加 窗口允许最小化 复选框
+        self.allow_minimize_check_box = QCheckBox("窗口允许最小化")
+        self.allow_minimize_check_box.setChecked(self.set_up_datas.get("allow_minimize", False))
+        self.allow_minimize_check_box.stateChanged.connect(self.solt_of_allow_minimize_check_box)
+        self.set_up_items_layout.addRow(self.allow_minimize_check_box)
+
         # 将 设置表单布局 添加至 主布局
         self.main_layout.addLayout(self.set_up_items_layout)
 
@@ -786,13 +798,19 @@ class SetUpWindow(QDialog):
         try:
             self.set_up_datas['on_top_time'] = float(self.on_top_time_input_box.text())
         except ValueError:
-            pass
+            print("[WARN]  用户输入无效")
 
     def solt_of_keep_work_input_box(self) -> None:
         try:
             self.set_up_datas['keep_work_time'] = float(self.keep_work_input_box.text())
         except ValueError:
-            pass
+            print("[WARN]  用户输入无效")
+
+    def solt_of_allow_minimize_check_box(self) -> None:
+        try:
+            self.set_up_datas['allow_minimize'] = self.allow_minimize_check_box.isChecked()
+        except ValueError:
+            print("[WARN]  复选框状态获取失败")
 
     def solt_of_ok_button(self) -> None:
         '''确认按钮槽函数'''
