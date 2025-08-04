@@ -1,6 +1,6 @@
 from transparent_overlay_window import TransparentOverlayWindow as TOW
 from PyQt5.QtWidgets import QApplication, QMessageBox, QWidget, QVBoxLayout, QGridLayout, QLabel, QPushButton, QFormLayout, QHBoxLayout, QDialog, QLineEdit, QCheckBox, QSizePolicy
-from PyQt5.QtGui import QCloseEvent, QIcon, QDoubleValidator
+from PyQt5.QtGui import QCloseEvent, QIcon, QDoubleValidator, QFontMetrics
 from PyQt5.QtCore import QEvent, Qt, QTimer, pyqtSignal
 from api import get_top_window_under_mouse, get_window_pos_and_size
 from buttonbox import main as show_buttonbox
@@ -11,7 +11,7 @@ from other_window import input_box_window
 from operation_profile import ProfileShell as ProfileShellClass
 from observe_window import ObserveWindow
 from typing import Any, Dict, Literal, List, Callable, NoReturn, Iterable
-import sys, win32gui, win32con, psutil, keyboard, ctypes, os, traceback, pywintypes, time, threading, webbrowser, re
+import sys, win32gui, win32con, win32com.client, psutil, keyboard, ctypes, os, traceback, pywintypes, time, threading, webbrowser, re
 
 
 class MainWindow(QWidget):
@@ -100,6 +100,8 @@ class MainWindow(QWidget):
             '''创建可复制的 QLabel '''
             obj = QLabel(*args, **kwargs)
             obj.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard) # type: ignore  # 设置可复制
+            obj.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)  # 设置固定大小
+            obj.setWordWrap(False)
             return obj
         def get_QLineEdit_read_only(*args: Any, width: int = 85) -> QLineEdit:
             '''创建禁用且固定宽度的 QLineEdit '''
@@ -208,29 +210,31 @@ class MainWindow(QWidget):
             [
                 QPushButton('结束所选进程'),
                 lambda pid, hwnd: (
-                    os.kill(pid, 9),
                     kill_process(pid),
                     print(f"已发送终止信号至进程 PID: {pid}")
                 )
             ],
             [
                 QPushButton('删除所选进程源文件'),
-                lambda: (
+                lambda pid, hwnd: (
                     (
+                        kill_process(pid),
                         pid_exe := self.select_obj.exe(),
-                        code := delete_file(pid_exe),
-                        print(f"文件 {pid_exe} 删除{'成功' if code else '失败'}")
-                    ) if self.select_obj else print(f"未选中进程")
-                ),
-                {'need': {'pid': False, 'hwnd': False}}
+                        success := delete_file(pid_exe),
+                        QMessageBox.information(self, '删除成功', f'文件 {pid_exe} 删除成功') if success else 
+                        QMessageBox.critical(self, '删除失败', f'文件 {pid_exe} 删除失败')
+                    ) if self.select_obj else QMessageBox.warning(self, '未选中进程', '请先选中进程')
+                )
             ],
             [
                 QPushButton('窗口无边框化'),
-                lambda pid, hwnd: self.set_window_border(hwnd, True)
+                lambda pid, hwnd: self.set_window_border(hwnd, True),
+                {'need': {'pid': True, 'hwnd': True}}
             ],
             [
                 QPushButton('窗口边框状态恢复'),
-                lambda pid, hwnd: self.set_window_border(hwnd, False)
+                lambda pid, hwnd: self.set_window_border(hwnd, False),
+                {'need': {'pid': True, 'hwnd': True}}
             ],
             [
                 QPushButton('窗口最小化'),
@@ -273,21 +277,9 @@ class MainWindow(QWidget):
             ],
             [
                 QPushButton('运行外部程序'),
-                lambda: input_box_window(
-                    parent=self,
-                    title='运行',
-                    icon_path=get_file_path('data\\icon\\run.svg'),
-                    info_text='子逸 将根据你所输入的名称，为你打开相应的程序、文件夹、文档或 Internet 资源。',
-                    buttons=('确定', '取消'),
-                    input_box_tip='请在此处输入...',
-                    button_click_callback = \
-                        lambda window, button, input_box: (
-                            threading.Thread(
-                                target = lambda: os.system(input_box.text())  # 此处运行在单独线程中，故无需处理错误
-                            ).start(),
-                            window.close()
-                        ) if button.text() == '确定' else window.close(),
-                ).exec_(),
+                lambda: (
+                    win32com.client.Dispatch("Shell.Application").FileRun() # 打开标准“运行”对话框
+                ),
                 {'need': {'pid': False, 'hwnd': False}}
             ]
         ]
@@ -303,13 +295,13 @@ class MainWindow(QWidget):
                 '''生成槽函数'''
                 def res_func() -> Any | None:
                     '''槽函数'''
-                    check_pid_and_solve = lambda pid: (  # 检查 pid 是否为 None 并在为 None 时打印信息
+                    check_pid_and_solve = lambda pid: (  # 检查 pid 是否为 None 并在为 None 时报错
                         True if self.IsProcess(pid)
-                        else print(f"当前进程无效 PID: {pid}")
+                        else QMessageBox.warning(self, '操作失败', f'未选中进程或进程{pid}无效，请先选中进程') and False # 阻止默认操作
                     )
-                    check_hwnd_and_solve = lambda hwnd: (  # 检查 hwnd 是否为 None 并在为 None 时打印信息
+                    check_hwnd_and_solve = lambda hwnd: (  # 检查 hwnd 是否为 None 并在为 None 时报错
                         True if self.IsWindow(hwnd)
-                        else print(f"当前窗口无效 HWND: {hwnd}")
+                        else QMessageBox.warning(self, '操作失败', f'未选中窗口或窗口{hwnd}无效，请先选中窗口') and False # 阻止默认操作
                     )
                     try:
                         # 检查是否选中窗口（检查 pid 和 hwnd 是否有效）
@@ -383,9 +375,6 @@ class MainWindow(QWidget):
 
     def set_window_border(self, hwnd, borderless: bool = True) -> None:
         '''设置窗口为无边框或恢复边框'''
-        if not self.IsWindow(hwnd):
-            print(f"当前窗口无效 HWND: {hwnd}")
-            return
         style = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE)
         if borderless:
             # 移除边框和标题栏
@@ -420,13 +409,6 @@ class MainWindow(QWidget):
         self.select_obj = psutil.Process(self.select_pid)
         self.select_process_info['suspend'] = False
         # 监测目标窗口尺寸/位置/标题变化
-        def _set_attribute(dict_obj: Dict, keys: str | Iterable[str], value: Any) -> None:
-            '''设置 给定字典的所有给定属性为给定值'''
-            if isinstance(keys, str):
-                dict_obj[keys] = value
-                return
-            for key in keys:
-                dict_obj[key] = value
         self.observe_obj = ObserveWindow(self.select_hwnd, # type: ignore
             lambda old_info, new_info: (
                 # 更新设置状态，防止更新窗口位置
@@ -547,7 +529,11 @@ class MainWindow(QWidget):
         self.sel_wind_info_widgets['window_title']['obj'][0].setText(title)
         self.sel_wind_info_widgets['window_title']['obj'][0].setEnabled(True)
 
-        self.sel_wind_info_widgets['window_exe']['obj'].setText(exe_file_path)
+        # 防止exe路径过长撑大窗口
+        metrics = QFontMetrics(self.sel_wind_info_widgets['window_exe']['obj'].font())
+        max_show_len = 50
+        filepath_text = exe_file_path if len(exe_file_path) <= max_show_len else exe_file_path[:max_show_len] + '...'
+        self.sel_wind_info_widgets['window_exe']['obj'].setText(filepath_text)
 
         self.sel_wind_info_widgets['window_pos']['obj'][1].setText(str(left))
         self.sel_wind_info_widgets['window_pos']['obj'][1].setEnabled(True)

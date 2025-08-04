@@ -1,9 +1,9 @@
 import ctypes, os
 
-def delete_file(path: str) -> None | bool:
+def delete_file(path: str) -> bool:
     print(f"删除文件: {path}")
     if not os.path.exists(path):
-        return None
+        return False
 
     try:
 
