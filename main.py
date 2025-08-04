@@ -4,13 +4,13 @@ from transparent_overlay_window import TransparentOverlayWindow as TOW
 from PyQt5.QtWidgets import QApplication, QMessageBox, QWidget, QVBoxLayout, QGridLayout, QLabel, QPushButton, QFormLayout, QHBoxLayout, QDialog, QLineEdit, QCheckBox, QSizePolicy
 from PyQt5.QtGui import QCloseEvent, QIcon, QDoubleValidator, QFontMetrics
 from PyQt5.QtCore import QEvent, Qt, QTimer, pyqtSignal
-from api import get_top_window_under_mouse, get_window_pos_and_size
+from api import get_top_window_under_mouse, get_window_pos_and_size, get_file_path
 from buttonbox import main as show_buttonbox
 from kill_process import kill_process
 from delete_file import delete_file
 from suspend_process import suspend_process, resume_process
 from other_window import input_box_window, MessageBox
-from operation_profile import Profile as ProfileClass
+from operation_profile import Profile as ProfileClass, OperationType, OperationData
 from observe_window import ObserveWindow
 from typing import Any, Dict, Literal, List, Callable, NoReturn, Iterable
 import sys, win32gui, win32con, win32process, psutil, keyboard, ctypes, os, traceback, pywintypes, time, threading, webbrowser, re, argparse
@@ -27,6 +27,17 @@ class MainWindow(QWidget):
         # 创建计时器，用于更新窗口
         self.update_window_timer = QTimer(self)
         self.update_window_timer.timeout.connect(self.slot_of_update_window)
+        # 创建计时器组，用于更新窗口属性
+        self.update_window_attribute_timers = {
+            "on_top": (
+                obj := QTimer(self),
+                obj.timeout.connect(self.slot_of_update_on_top)
+            )[0],
+            "keep_work": (
+                obj := QTimer(self),
+                obj.timeout.connect(self.slot_of_update_keep_work)
+            )[0],
+        }
 
         # 初始化蒙版属性
         self.init_overlay_attribute()
@@ -56,8 +67,8 @@ class MainWindow(QWidget):
 
         self.setGeometry(left, top, width, height)
 
-        self.IsWindow = lambda hwnd: isinstance(hwnd, int) and win32gui.IsWindow(hwnd)
-        self.IsProcess = lambda pid: isinstance(pid, int) and psutil.pid_exists(pid)
+        self.IsWindow: Callable[[Any], bool]  = lambda hwnd: bool(isinstance(hwnd, int) and win32gui.IsWindow(hwnd))
+        self.IsProcess: Callable[[int], bool] = lambda pid: isinstance(pid, int) and psutil.pid_exists(pid)
 
         self.main_UI()
 
@@ -428,7 +439,10 @@ class MainWindow(QWidget):
         self.setLayout(self.super_layout)
 
         # 启动更新窗口计时器
-        self.update_window_timer.start(0)
+        self.update_window_timer.start(100)
+        # 启动更新属性状态计时器
+        self.stop_and_start_timer('on_top', 'on_top_time')
+        self.stop_and_start_timer('keep_work', 'keep_work_time')
 
     def set_window_border(self, hwnd, borderless: bool = True) -> None:
         '''设置窗口为无边框或恢复边框'''
@@ -483,11 +497,34 @@ class MainWindow(QWidget):
                 self.sel_wind_info_widgets['window_size']['obj'][1].setText(str(new_info['size'][0])),
                 self.sel_wind_info_widgets['window_size']['obj'][3].setText(str(new_info['size'][1])),
             ),
-            wait_time=0
+            wait_time=0.1
         )
         self.observe_obj.start()
         # 更改显示信息
         self.update_input_box()
+
+    def slot_of_profile_callback(self, op_type: OperationType, data: OperationData):
+        '''配置文件回调函数'''
+        if op_type == OperationType.SET_ITEM:
+            # 设置键值对，检查是否更新计时器
+            if data['key'] == 'set_up' and isinstance(data['new_value'].get('on_top_time', None), (float, int)):
+                self.stop_and_start_timer('on_top', 'on_top_time')
+            if data['key'] == 'set_up' and isinstance(data['new_value'].get('keep_work_time', None), (float, int)):
+                self.stop_and_start_timer('keep_work', 'keep_work_time')
+        elif op_type == OperationType.SET_ALL:
+            self.stop_and_start_timer('on_top', 'on_top_time')
+            self.stop_and_start_timer('keep_work', 'keep_work_time')
+        else:
+            ...
+
+    def stop_and_start_timer(self, timer_name: str, profile_key: str, root_key: str = 'set_up', default_value: int = -1) -> None:
+        '''停止并按配置文件中的时间重新启动计时器'''
+        if self.update_window_attribute_timers.get(timer_name, None) is None:
+            raise KeyError(f"计时器 {timer_name} 不存在")
+        self.update_window_attribute_timers[timer_name].stop()
+        time = int(profile_obj.get(root_key, {profile_key: default_value}, using_callback = False).get(profile_key, default_value) * 1000)
+        if time >= 0:
+            self.update_window_attribute_timers[timer_name].start(time)
 
     def slot_of_setbutton(self):
         '''设置按钮槽函数'''
@@ -512,26 +549,28 @@ class MainWindow(QWidget):
         self.about_window = AboutWindow(self)
         self.about_window.exec_()
 
-    def slot_of_update_window(self):
-        '''更新窗口'''
-        # 重绘窗口，防止恶意软件的特效覆盖
-        self.update()
-        # 判断是否强制置顶
-        if 0 <= profile_obj.get('set_up', {'on_top_time': 0}).get('on_top_time', 0) <= time.time() - self.last_on_top_time:
-            # 重置时间
-            self.last_on_top_time = time.time()
+    def slot_of_update_on_top(self):
+        '''更新置顶状态'''
+        if profile_obj.get('set_up', {'on_top_time': -1}).get('on_top_time', -1) >= 0:
             # 置顶
             win32gui.SetWindowPos(
-                self.winId(), # 指定窗口 # type: ignore
+                self.winId(), # 目标窗口 # type: ignore
                 win32con.HWND_TOPMOST, # 置顶的方式
                 0, 0, 0, 0,
                 win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE  # 置顶时，不移动，不改变大小，不激活窗口（不获取焦点）
             )
-        if 0 <= profile_obj.get('set_up', {'keep_work_time': 0}).get('keep_work_time', 0) <= time.time() - self.last_keep_work_time:
-            # 重置时间
-            self.last_keep_work_time = time.time()
-            # 恢复状态
+
+    def slot_of_update_keep_work(self):
+        '''更新保持工作状态'''
+        if profile_obj.get('set_up', {'keep_work_time': -1}).get('keep_work_time', -1) >= 0:
+            # 保持工作
+            self.show()
             self.showNormal()
+
+    def slot_of_update_window(self):
+        '''更新窗口'''
+        # 重绘窗口，防止恶意软件的特效覆盖
+        self.update()
         # 更新输入框
         select_is_window = self.IsWindow(self.select_hwnd)
 
@@ -740,13 +779,7 @@ class SetUpWindow(QDialog):
         self.setWindowFlag(Qt.Dialog) # type: ignore
 
         # 初始化属性
-        self.set_up_datas:dict = profile_obj.get(  # 设置项值
-            'set_up',
-            {
-                "on_top_time": -1.0, # 强制置顶时间间隔    负数表示不置顶
-                "keep_work_time": -1.0 # 强制前台时间间隔  负数表示不强制在前台
-            }
-        )
+        self.set_up_datas:dict = profile_obj.get('set_up')  # 设置项值
         self.clicked_ok = False  # 是否点击过确定按钮
 
         # 初始化界面
@@ -773,9 +806,9 @@ class SetUpWindow(QDialog):
         tip_text = QLabel("小提示: 将数值设置为负值以禁用该项")
         tip_text.setStyleSheet("""
             QLabel {
-                color: gray;                        /* 灰色文本 */
+                color: #F2DB1C;                     /* 文本颜色 */
                 qproperty-alignment: AlignCenter;   /* 水平与垂直居中 */
-                font-size: 12px;                    /* 可选：设置字体大小 */
+                font-size: 12px;                    /* 字体大小 */
             }
         """)
         self.tip_text: QLabel = tip_text
@@ -785,21 +818,15 @@ class SetUpWindow(QDialog):
         self.on_top_time_input_box = QLineEdit()
         self.on_top_time_input_box.setValidator(QDoubleValidator(-1, 60, 3))
         self.on_top_time_input_box.setText(str(self.set_up_datas["on_top_time"]))
-        self.on_top_time_input_box.textChanged.connect(self.slot_of_on_top_time_input_box)
+        self.on_top_time_input_box.textChanged.connect(self.solt_of_on_top_time_input_box)
         self.set_up_items_layout.addRow(QLabel("强制置顶间隔时间(s)"), self.on_top_time_input_box)
 
         # 添加 强制前台间隔时间 输入框
         self.keep_work_input_box = QLineEdit()
         self.keep_work_input_box.setValidator(QDoubleValidator(-1, 60, 3))
         self.keep_work_input_box.setText(str(self.set_up_datas["keep_work_time"]))
-        self.keep_work_input_box.textChanged.connect(self.slot_of_keep_work_input_box)
+        self.keep_work_input_box.textChanged.connect(self.solt_of_keep_work_input_box)
         self.set_up_items_layout.addRow(QLabel("强制前台间隔时间(s)"), self.keep_work_input_box)
-
-        # 添加 窗口允许最小化 复选框
-        self.allow_minimize_check_box = QCheckBox("窗口允许最小化")
-        self.allow_minimize_check_box.setChecked(self.set_up_datas.get("allow_minimize", False))
-        self.allow_minimize_check_box.stateChanged.connect(self.slot_of_allow_minimize_check_box)
-        self.set_up_items_layout.addRow(self.allow_minimize_check_box)
 
         # 将 设置表单布局 添加至 主布局
         self.main_layout.addLayout(self.set_up_items_layout)
@@ -808,31 +835,25 @@ class SetUpWindow(QDialog):
         self.main_layout.addStretch()
         # 添加 确认按钮 至 主布局
         self.ok_button = QPushButton("确定")
-        self.ok_button.clicked.connect(self.slot_of_ok_button)
+        self.ok_button.clicked.connect(self.solt_of_ok_button)
         self.main_layout.addWidget(self.ok_button)
 
         # 设置窗口布局
         self.setLayout(self.main_layout)
     
-    def slot_of_on_top_time_input_box(self) -> None:
+    def solt_of_on_top_time_input_box(self) -> None:
         try:
             self.set_up_datas['on_top_time'] = float(self.on_top_time_input_box.text())
         except ValueError:
-            print("[WARN]  用户输入无效")
+            pass
 
-    def slot_of_keep_work_input_box(self) -> None:
+    def solt_of_keep_work_input_box(self) -> None:
         try:
             self.set_up_datas['keep_work_time'] = float(self.keep_work_input_box.text())
         except ValueError:
-            print("[WARN]  用户输入无效")
+            pass
 
-    def slot_of_allow_minimize_check_box(self) -> None:
-        try:
-            self.set_up_datas['allow_minimize'] = self.allow_minimize_check_box.isChecked()
-        except ValueError:
-            print("[WARN]  复选框状态获取失败")
-
-    def slot_of_ok_button(self) -> None:
+    def solt_of_ok_button(self) -> None:
         '''确认按钮槽函数'''
         # 关闭窗口并保存更改
         self.signal_save.emit(
@@ -858,6 +879,9 @@ class SetUpWindow(QDialog):
         )
         # 关闭窗口
         return super().closeEvent(event)
+
+
+
 
 class AboutWindow(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -927,12 +951,6 @@ def run_again_as_admin(parent = None, args = '') -> None:
     else:
         ctypes.windll.kernel32.ExitProcess(0)
 
-
-def get_file_path(file_path: str):
-    """获取资源文件实际绝对路径"""
-    return os.path.join(sys._MEIPASS if hasattr(sys, '_MEIPASS') else os.path.abspath("."), file_path) # type: ignore
-
-
 def exit_the_app(code: int = 0) -> NoReturn:
     '''退出程序'''
     # 释放资源
@@ -975,8 +993,9 @@ if __name__ == "__main__":
         # 创建应用程序实例
         app = QApplication(sys.argv)
         main_window = MainWindow()
-        if args.hwnd:
-            main_window.select_hwnd = int(args.hwnd)
+        # 根据命令行参数修改选中窗口
+        if args.hwnd and main_window.IsWindow(select_hwnd := int(args.hwnd)):
+            main_window.select_hwnd = select_hwnd
             main_window.select_pid = win32process.GetWindowThreadProcessId(main_window.select_hwnd)[1]
             main_window.chose_window()
         main_window.show()
