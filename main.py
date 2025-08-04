@@ -852,11 +852,21 @@ def is_admin() -> bool:
     except:
         return False
     
-def run_again_as_admin(parent = None) -> None:
+def run_again_as_admin(parent = None, args = '') -> None:
     '''以管理员身份重新运行当前程序'''
     # 请求UAC提权
+    if getattr(sys, 'frozen', False):
+        # 打包环境
+        exe_path = sys.executable
+        params = args
+    else:
+        # 非打包环境
+        exe_path = sys.executable
+        script_path = os.path.abspath(__file__)
+        params = f'"{script_path}" {args}'
+
     if ctypes.windll.shell32.ShellExecuteW(
-        None, "runas", sys.executable, " ".join(sys.argv), None, not hasattr(sys, 'frozen') # hasattr(sys, 'frozen') -> 是否在打包后的环境中 此处最后一个参数的值影响提权后命令窗口是否显示，0为不显示 ⚠️当参数为0时，Windows会阻止子窗口渲染，导致所有Qt窗口失效 但不影打包为【单文件】的程序⚠️
+        None, "runas", exe_path, params, None, 1 # SW_NORMAL
     ) <= 32:
         print("[ERROR] 提升权限失败!")
         QMessageBox.critical(parent, "错误", "提升权限失败!")
