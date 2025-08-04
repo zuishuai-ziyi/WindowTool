@@ -14,6 +14,9 @@ from operation_profile import Profile as ProfileClass, OperationType, OperationD
 from observe_window import ObserveWindow
 from typing import Any, Dict, Literal, List, Callable, NoReturn, Iterable
 import sys, win32gui, win32con, win32process, psutil, keyboard, ctypes, os, traceback, pywintypes, time, threading, webbrowser, re, argparse
+import sys, win32gui, win32con, win32process, psutil, keyboard, ctypes, os, traceback, pywintypes, time, threading, webbrowser, re
+from uia import get_current_session_id, load_uia
+
 
 
 class MainWindow(QWidget):
@@ -966,6 +969,34 @@ if __name__ == "__main__":
         parser = argparse.ArgumentParser()
         parser.add_argument('--hwnd', type=int, default=None, help='需选中窗口的句柄')
         args = parser.parse_args()
+        if is_admin():
+            print('[TRACE] 试图启用 UIAccess...')
+            try:
+                uiaccess, IsUIA, StartUIA = load_uia()
+                if not IsUIA():
+                    if getattr(sys, 'frozen', False):
+                        # 打包环境
+                        exe_path = sys.executable
+                        params = 'app'
+                    else:
+                        # 非打包环境
+                        exe_path = sys.executable
+                        script_path = os.path.abspath(__file__)
+                        params = f'pythonw "{script_path}"'
+                    if args.hwnd:
+                        params += f' --hwnd={args.hwnd}'
+                    
+                    from ctypes import wintypes
+                    pid = wintypes.DWORD(0)
+                    if not StartUIA(exe_path, params, 0, ctypes.byref(pid), get_current_session_id()):
+                        raise ctypes.WinError(ctypes.get_last_error())
+                    else:
+                        print(f'[TRACE] UIAccess 启动成功，PID: {pid.value}')
+                        ctypes.windll.kernel32.ExitProcess(0)
+                else:
+                    print('[TRACE] UIAccess 已启用')
+            except Exception as e:
+                print(f'[WARN]  UIAccess 加载失败: {e}')
         # 读取配置文件
         profile_obj = ProfileClass(get_file_path("data\\profile\\data.yaml"))
         default_profile = \
@@ -990,6 +1021,12 @@ if __name__ == "__main__":
             except Exception as e:
                 print(f"重置配置文件时发生异常: {e}")
                 os._exit(0)
+        try:
+            profile_obj = ProfileShellClass(get_file_path("data\\profile\\data.yaml"))
+        except Exception as e:
+            print(f"[FATAL] 配置文件加载失败: {e}")
+            os._exit(0)
+
         # 创建应用程序实例
         app = QApplication(sys.argv)
         main_window = MainWindow()
