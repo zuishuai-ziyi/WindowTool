@@ -1,12 +1,20 @@
 import os, yaml
 from typing import Any
 
+DEFAULT_CONFIG = {
+    "set_up": {
+        "keep_work_time": -1.0,
+        "on_top_time": -1.0
+    }
+}
+
 class profile:
     def __init__(self, profile_path, /) -> None:
         # 验证并设置属性
-        if not os.path.exists(profile_path):
-            raise FileNotFoundError(f"文件 {profile_path} 不存在")
         self.profile_path = profile_path
+        if not os.path.exists(profile_path):
+            print(f"[INFO]  文件 {profile_path} 不存在，正在创建")
+            self.create()
 
     def __enter__(self):
         # 进入 with 块时，返回自身
@@ -15,7 +23,18 @@ class profile:
     def __exit__(self, *args) -> None:
         return None
     
-    def get(self) -> dict[Any, Any] | Any:
+    def create(self) -> None:
+        '''创建配置文件'''
+        try:
+            os.makedirs(os.path.dirname(self.profile_path), exist_ok=True)
+            with open(self.profile_path, 'w+', encoding='utf-8') as f:
+                yaml.dump(DEFAULT_CONFIG, f)
+            print(f"[INFO]  配置文件 {self.profile_path} 创建成功")
+        except Exception as e:
+            print(f"[ERROR] 配置文件创建失败，错误信息：{e}")
+            raise e
+    
+    def get(self) -> dict[Any, Any]:
         '''获取配置文件内容'''
         if not os.path.exists(self.profile_path):
             raise FileNotFoundError(f"文件 {self.profile_path} 不存在")
@@ -24,11 +43,16 @@ class profile:
             try:
                 data: Any = yaml.safe_load(f)
             except Exception:
-                print(f"[Error] 文件 {self.profile_path} 内容格式错误：{(text := f.read())}")
-                return text
+                print(f"[ERROR] 配置文件格式错误，重新初始化……")
+                self.create()
+                return self.get()
 
         if not isinstance(data, dict):
-            print(f"[Warnning] 从文件 {self.profile_path} 中读取的数据类型为 {type(data)}，值为 {data}")
+            print(f"[WARN]  数据类型错误，预期: dict，实际: {type(data)}")
+            # 打印调用栈
+            import traceback
+            traceback.print_stack()
+            return {}
         return data
     
     def set(self, key: str, value: Any) -> bool:
@@ -36,18 +60,16 @@ class profile:
         if not os.path.exists(self.profile_path):
             raise FileNotFoundError(f"文件 {self.profile_path} 不存在")
         
+        print('[TRACE] 设置配置文件键值对')
         data = self.get()
         with open(self.profile_path, 'w+', encoding='utf-8') as f:
-            if not isinstance(data, dict):
-                return False
             data[key] = value
             yaml.dump(data, f)
         return True
     
     def write(self, d: dict) -> None:
         '''向配置文件中写入字典'''
-        if not os.path.exists(self.profile_path):
-            raise FileNotFoundError(f"文件 {self.profile_path} 不存在")
+        print('[TRACE] 保存配置文件')
         with open(self.profile_path, 'w+', encoding='utf-8') as f:
             yaml.dump(d, f)
         return None

@@ -287,6 +287,12 @@ class MainWindow(QWidget):
                 {'need': {'pid': False, 'hwnd': False}}
             ]
         ]
+        if not is_admin():
+            dos_buttons.append([
+                QPushButton('管理员权限'),
+                lambda: run_again_as_admin(),
+                {'need': {'pid': False, 'hwnd': False}}
+            ])
         # 将 窗口操作控件 添加至 窗口操作布局
         for index, item in enumerate(dos_buttons):
             def make_slot(func, item) -> Callable[[], Any] | Callable[[], None]:
@@ -868,9 +874,8 @@ def run_again_as_admin() -> None:
     if ctypes.windll.shell32.ShellExecuteW(
         None, "runas", sys.executable, " ".join(sys.argv), None, not hasattr(sys, 'frozen') # hasattr(sys, 'frozen') -> 是否在打包后的环境中 此处最后一个参数的值影响提权后命令窗口是否显示，0为不显示 ⚠️当参数为0时，Windows会阻止子窗口渲染，导致所有Qt窗口失效 但不影打包为【单文件】的程序⚠️
     ) <= 32:
-        show_buttonbox(run_app_exec=True, button_texts=("确定", ), tip_text="提升权限失败，程序终止", title="错误", window_size=(500, 309))
-        print("提升权限失败，程序终止")
-    os._exit(0)
+        show_buttonbox(run_app_exec=False, button_texts=("确定", ), tip_text="提升权限失败，程序终止", title="错误", window_size=(500, 309))
+        print("提升权限失败!")
 
 
 def get_file_path(file_path: str):
@@ -889,14 +894,13 @@ def exit_the_app(code: int = 0) -> NoReturn:
 
 if __name__ == "__main__":
     try:
-        if not is_admin():
-            run_again_as_admin()
         # 读取配置文件
         try:
             profile_obj = ProfileShellClass(get_file_path("data\\profile\\data.yaml"))
-        except FileNotFoundError as e:
-            print(f"配置文件不存在: {e}")
+        except Exception as e:
+            print(f"配置文件加载失败: {e}")
             os._exit(0)
+        # 创建应用程序实例
         app = QApplication(sys.argv)
         main_window = MainWindow()
         main_window.show()
