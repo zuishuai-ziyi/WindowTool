@@ -27,9 +27,17 @@ class MainWindow(QWidget):
         # 创建计时器，用于更新窗口
         self.update_window_timer = QTimer(self)
         self.update_window_timer.timeout.connect(self.slot_of_update_window)
-        # 创建计时器，用于更新窗口置顶状态
-        self.update_on_top_timer = QTimer(self)
-        self.update_on_top_timer.timeout.connect(self.slot_of_update_on_top)
+        # 创建计时器组，用于更新窗口属性
+        self.update_window_attribute_timers = {
+            "on_top": (
+                obj := QTimer(self),
+                obj.timeout.connect(self.slot_of_update_on_top)
+            )[0],
+            "keep_work": (
+                obj := QTimer(self),
+                obj.timeout.connect(self.slot_of_update_keep_work)
+            )[0],
+        }
 
         # 初始化蒙版属性
         self.init_overlay_attribute()
@@ -386,11 +394,10 @@ class MainWindow(QWidget):
         self.setLayout(self.super_layout)
 
         # 启动更新窗口计时器
-        self.update_window_timer.start(0)
-        # 启动更新置顶状态计时器
-        update_on_top_time = int(profile_obj.get('set_up', {'on_top_time': -1}).get('on_top_time', -1) * 1000)  # 转化为毫秒并取整
-        if update_on_top_time >= 0:
-            self.update_on_top_timer.start()
+        self.update_window_timer.start(100)
+        # 启动更新属性状态计时器
+        self.stop_and_start_timer('on_top', 'on_top_time')
+        self.stop_and_start_timer('keep_work', 'keep_work_time')
 
     def set_window_border(self, hwnd, borderless: bool = True) -> None:
         '''设置窗口为无边框或恢复边框'''
@@ -440,32 +447,34 @@ class MainWindow(QWidget):
                 self.sel_wind_info_widgets['window_size']['obj'][1].setText(str(new_info['size'][0])),
                 self.sel_wind_info_widgets['window_size']['obj'][3].setText(str(new_info['size'][1])),
             ),
-            wait_time=0
+            wait_time=0.1
         )
         self.observe_obj.start()
         # 更改显示信息
         self.update_input_box()
     
-    def slot_of_profile_callback(self, op_type: OperationType, data: OperationData):
+    def slot_of_profile_callback(self, op_type: OperationType, data: OperationData):  # L1
         '''配置文件回调函数'''
         if op_type == OperationType.SET_ITEM:
-            # 设置键值对，检查是否更新置顶状态计时器
+            # 设置键值对，检查是否更新计时器
             if data['key'] == 'set_up' and isinstance(data['new_value'].get('on_top_time', None), (float, int)):
-                # 更新计时器
-                self.update_on_top_timer.stop()
-                time = int(data['new_value'].get('on_top_time', -1) * 1000)
-                if time >= 0:
-                    self.update_on_top_timer.start(time)
+                self.stop_and_start_timer('on_top', 'on_top_time')
+            if data['key'] == 'set_up' and isinstance(data['new_value'].get('keep_work_time', None), (float, int)):
+                self.stop_and_start_timer('keep_work', 'keep_work_time')
         elif op_type == OperationType.SET_ALL:
-            # 设置所有键值对，更新置顶状态计时器
-            self.update_on_top_timer.stop()
-            time = int(profile_obj.get('set_up', {'on_top_time': -1}, using_callback = False).get('on_top_time', -1) * 1000)
-            if time >= 0:
-                self.update_on_top_timer.start(time)
+            self.stop_and_start_timer('on_top', 'on_top_time')
+            self.stop_and_start_timer('keep_work', 'keep_work_time')
         else:
             ...
-        
 
+    def stop_and_start_timer(self, timer_name: str, profile_key: str, root_key: str = 'set_up', default_value: int = -1) -> None:
+        '''停止并按配置文件中的时间重新启动计时器'''
+        if self.update_window_attribute_timers.get(timer_name, None) is None:
+            raise KeyError(f"计时器 {timer_name} 不存在")
+        self.update_window_attribute_timers[timer_name].stop()
+        time = int(profile_obj.get(root_key, {profile_key: default_value}, using_callback = False).get(profile_key, default_value) * 1000)
+        if time >= 0:
+            self.update_window_attribute_timers[timer_name].start(time)
     def slot_of_setbutton(self):
         '''设置按钮槽函数'''
         # 创建设置窗口
@@ -500,26 +509,17 @@ class MainWindow(QWidget):
                 win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE  # 置顶时，不移动，不改变大小，不激活窗口（不获取焦点）
             )
 
+    def slot_of_update_keep_work(self):
+        '''更新保持工作状态'''
+        if profile_obj.get('set_up', {'keep_work_time': -1}).get('keep_work_time', -1) >= 0:
+            # 保持工作
+            self.show()
+            self.showNormal()
+
     def slot_of_update_window(self):
         '''更新窗口'''
         # 重绘窗口，防止恶意软件的特效覆盖
         self.update()
-        # 判断是否强制置顶
-        # if 0 <= profile_obj.get('set_up', {'on_top_time': 0}).get('on_top_time', 0) <= time.time() - self.last_on_top_time:
-        #     # 重置时间
-        #     self.last_on_top_time = time.time()
-        #     # 置顶
-        #     win32gui.SetWindowPos(
-        #         self.winId(), # 指定窗口 # type: ignore
-        #         win32con.HWND_TOPMOST, # 置顶的方式
-        #         0, 0, 0, 0,
-        #         win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE  # 置顶时，不移动，不改变大小，不激活窗口（不获取焦点）
-        #     )
-        if 0 <= profile_obj.get('set_up', {'keep_work_time': 0}).get('keep_work_time', 0) <= time.time() - self.last_keep_work_time:
-            # 重置时间
-            self.last_keep_work_time = time.time()
-            # 恢复状态
-            self.showNormal()
         # 更新输入框
         select_is_window = self.IsWindow(self.select_hwnd)
 
@@ -601,7 +601,7 @@ class MainWindow(QWidget):
             self.start_get_window_button.setText("开始获取")
             self.is_getting_info = False
         else:
-            self.update_sele_wind_timer.start(0)
+            self.update_sele_wind_timer.start(50)
             self.start_get_window_button.setText("停止获取")
             self.showMinimized()
             self.is_getting_info = True
