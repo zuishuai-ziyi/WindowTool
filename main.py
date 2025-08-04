@@ -222,6 +222,9 @@ class MainWindow(QWidget):
                     (
                         kill_process(pid),
                         pid_exe := self.select_obj.exe(),
+                        handle := ctypes.windll.kernel32.OpenProcess(win32con.PROCESS_ALL_ACCESS, False, pid),
+                        ctypes.windll.kernel32.WaitForSingleObject(handle, 3000),
+                        ctypes.windll.kernel32.CloseHandle(handle),
                         success := delete_file(pid_exe),
                         QMessageBox.information(self, '删除成功', f'文件 {pid_exe} 删除成功') if success else 
                         QMessageBox.critical(self, '删除失败', f'文件 {pid_exe} 删除失败')
@@ -416,6 +419,8 @@ class MainWindow(QWidget):
             print(f"[WARN]  无法访问目标窗口的进程，可能是权限不足或进程已结束")
             if QMessageBox.warning(self, '无法访问进程', f'无法访问进程 PID: {self.select_pid}，是否提权？', QMessageBox.Yes | QMessageBox.No) == QMessageBox.Yes:
                 run_again_as_admin(self, f'--hwnd={self.select_hwnd}')
+        else:
+            ctypes.windll.kernel32.CloseHandle(phandle) # 关闭句柄
         # 更新数据
         self.select_obj = psutil.Process(self.select_pid)
         self.select_process_info['suspend'] = False

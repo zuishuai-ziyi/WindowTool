@@ -1,7 +1,7 @@
 import ctypes, os
 
 def delete_file(path: str) -> bool:
-    print(f"删除文件: {path}")
+    print(f"[TRACE] 删除文件: {path}")
     if not os.path.exists(path):
         return False
 
@@ -15,7 +15,7 @@ def delete_file(path: str) -> bool:
         return bool(ctypes.windll.kernel32.DeleteFileW(path))
 
     except:
-        print(f"删除文件失败: {path}")
+        print(f"[ERROR] 删除文件失败: {path}")
         return False
 
 if __name__ == "__main__":
