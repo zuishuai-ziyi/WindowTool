@@ -8,7 +8,7 @@ from kill_process import kill_process
 from delete_file import delete_file
 from suspend_process import suspend_process, resume_process
 from other_window import input_box_window
-from operation_profile import Profile as ProfileClass
+from operation_profile import Profile as ProfileClass, OperationType, OperationData
 from observe_window import ObserveWindow
 from typing import Any, Dict, Literal, List, Callable, Never, NoReturn, Iterable
 import sys, win32gui, win32con, psutil, keyboard, ctypes, os, traceback, pywintypes, time, threading, webbrowser, functools, re
@@ -18,6 +18,8 @@ class MainWindow(QWidget):
     '''主窗口'''
     def __init__(self) -> None:
         super().__init__()
+        # 注册配置文件回调函数
+        profile_obj.register_callback(self.slot_of_profile_callback)
 
         # 创建计时器，用于更新选中窗口信息
         self.update_sele_wind_timer = QTimer(self)
@@ -386,7 +388,9 @@ class MainWindow(QWidget):
         # 启动更新窗口计时器
         self.update_window_timer.start(0)
         # 启动更新置顶状态计时器
-        self.update_on_top_timer.start(int(profile_obj.get('set_up', {'on_top_time': -1}).get('on_top_time', -1) * 1000))  # 转化为毫秒并取整
+        update_on_top_time = int(profile_obj.get('set_up', {'on_top_time': -1}).get('on_top_time', -1) * 1000)  # 转化为毫秒并取整
+        if update_on_top_time >= 0:
+            self.update_on_top_timer.start()
 
     def set_window_border(self, hwnd, borderless: bool = True) -> None:
         '''设置窗口为无边框或恢复边框'''
@@ -441,6 +445,26 @@ class MainWindow(QWidget):
         self.observe_obj.start()
         # 更改显示信息
         self.update_input_box()
+    
+    def slot_of_profile_callback(self, op_type: OperationType, data: OperationData):
+        '''配置文件回调函数'''
+        if op_type == OperationType.SET_ITEM:
+            # 设置键值对，检查是否更新置顶状态计时器
+            if data['key'] == 'set_up' and isinstance(data['new_value'].get('on_top_time', None), (float, int)):
+                # 更新计时器
+                self.update_on_top_timer.stop()
+                time = int(data['new_value'].get('on_top_time', -1) * 1000)
+                if time >= 0:
+                    self.update_on_top_timer.start(time)
+        elif op_type == OperationType.SET_ALL:
+            # 设置所有键值对，更新置顶状态计时器
+            self.update_on_top_timer.stop()
+            time = int(profile_obj.get('set_up', {'on_top_time': -1}, using_callback = False).get('on_top_time', -1) * 1000)
+            if time >= 0:
+                self.update_on_top_timer.start(time)
+        else:
+            ...
+        
 
     def slot_of_setbutton(self):
         '''设置按钮槽函数'''
@@ -481,16 +505,16 @@ class MainWindow(QWidget):
         # 重绘窗口，防止恶意软件的特效覆盖
         self.update()
         # 判断是否强制置顶
-        if 0 <= profile_obj.get('set_up', {'on_top_time': 0}).get('on_top_time', 0) <= time.time() - self.last_on_top_time:
-            # 重置时间
-            self.last_on_top_time = time.time()
-            # 置顶
-            win32gui.SetWindowPos(
-                self.winId(), # 指定窗口 # type: ignore
-                win32con.HWND_TOPMOST, # 置顶的方式
-                0, 0, 0, 0,
-                win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE  # 置顶时，不移动，不改变大小，不激活窗口（不获取焦点）
-            )
+        # if 0 <= profile_obj.get('set_up', {'on_top_time': 0}).get('on_top_time', 0) <= time.time() - self.last_on_top_time:
+        #     # 重置时间
+        #     self.last_on_top_time = time.time()
+        #     # 置顶
+        #     win32gui.SetWindowPos(
+        #         self.winId(), # 指定窗口 # type: ignore
+        #         win32con.HWND_TOPMOST, # 置顶的方式
+        #         0, 0, 0, 0,
+        #         win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE  # 置顶时，不移动，不改变大小，不激活窗口（不获取焦点）
+        #     )
         if 0 <= profile_obj.get('set_up', {'keep_work_time': 0}).get('keep_work_time', 0) <= time.time() - self.last_keep_work_time:
             # 重置时间
             self.last_keep_work_time = time.time()
@@ -913,20 +937,21 @@ if __name__ == "__main__":
         default_profile = \
         {
             'set_up': {
-                'on_top_time': -1,    # 强制置顶间隔时间
-                'keep_work_time': -1  # 强制前台间隔时间
+                'on_top_time': -1.0,    # 强制置顶间隔时间
+                'keep_work_time': -1.0  # 强制前台间隔时间
             }
         }
         # 设置默认值
         profile_obj.set_default(default_profile)
         if not profile_obj.check_file():
-            print("配置文件存在错误或不存在，尝试重置...")
+            print("配置文件不存在或存在错误，尝试重置...")
             if profile_obj.file_exists():
                 os.remove(get_file_path("data\\profile\\data.yaml"))
             try:
                 profile_obj.create(default_profile)
+                print("重置成功")
             except Exception as e:
-                print(f"创建配置文件失败: {e}")
+                print(f"重置配置文件时发生异常: {e}")
                 os._exit(0)
 
         app = QApplication(sys.argv)

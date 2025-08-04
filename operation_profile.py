@@ -1,20 +1,41 @@
-import os, yaml, copy
-from typing import Any, Self, Dict, List, Type, NoReturn, Iterable
+import os, yaml
+from enum import IntEnum, auto
+from typing import Any, Self, Dict, List, Type, NoReturn, Iterable, Callable, TypeVar
 from pathlib import Path
+
+class OperationType(IntEnum):
+    '''操作类型'''
+    SET_ITEM = auto()
+    '''设置键值对'''
+    SET_ALL = auto()
+    '''设置所有键值对'''
+    GET = auto()
+    '''获取键值对'''
+    DEL = auto()
+    '''删除键值对'''
+    CREATE = auto()
+    '''创建配置文件'''
+
+OperationData = Dict[str, Any]
+'''操作的数据'''
 
 class Profile:
     def __init__(self, file_path: str) -> None:
         self.file = Path(file_path)
         self.default: Dict = {}
+        self.callback: Callable[[OperationType, OperationData], Any] | None = None
 
-    def get[T](self, key:str | None = None, default: None | T = None, *, file_path: None | str = None) -> T | Dict[str, Any]:
+    def get[T](self, key:str | None = None, default: None | T = None, *, file_path: None | str = None, using_callback: bool = True) -> T | Dict[str, Any]:
         '''获取配置文件内容'''
         path = self._get_file_path_or_raise_err(file_path)
         with open(path, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f)
-        return data if key is None else data.get(key, default)
+        value = data if key is None else data.get(key, default)
+        if self.callback and using_callback:
+            self.callback(OperationType.GET, {"key": key, "value": value})
+        return value
 
-    def set(self, key: str, value: Any, *, file_path: None | str = None):
+    def set(self, key: str, value: Any, *, file_path: None | str = None, using_callback: bool = True):
         '''更改配置文件置顶键值对的内容'''
         path = self._get_file_path_or_raise_err(file_path)
         data = self.get()
@@ -22,13 +43,17 @@ class Profile:
             # print(data)
             data[key] = value
             yaml.dump(data, f)
+        if self.callback and using_callback:
+            self.callback(OperationType.SET_ITEM, {"key": key, "new_value": value})
         return
 
-    def set_all(self, data, *, file_path: None | str = None):
+    def set_all(self, data, *, file_path: None | str = None, using_callback: bool = True):
         '''设置配置文件内容'''
         path = self._get_file_path_or_raise_err(file_path)
         with open(path, 'w+', encoding='utf-8') as f:
             yaml.dump(data, f)
+        if self.callback and using_callback:
+            self.callback(OperationType.SET_ALL, {"new_value": data})
         return
 
     def set_default(self, data: Dict[str, Any]):
@@ -42,8 +67,11 @@ class Profile:
             return False
         _data = self.default if data is None else data
         using_default = data is None
-        file_data = self.get()
-        return self._check_iterable(file_data, _data, using_default)
+        try:
+            file_data = self.get()
+            return self._check_iterable(file_data, _data, using_default)
+        except Exception:
+            return False
 
     def _check_iterable(self, obj1: Iterable, obj2: Iterable, using_default: bool) -> bool:
         # print('check ', obj1, obj2, isinstance(obj1, dict), isinstance(obj2, dict), using_default)
@@ -100,8 +128,10 @@ class Profile:
                 return False
         return True
 
-    def create(self, data: Dict[str, Any]):
+    def create(self, data: Dict[str, Any], *, using_callback: bool = True):
         '''创建配置文件'''
+        if self.callback and using_callback:
+            self.callback(OperationType.CREATE, {"path": self.file, "new_value": data})
         with open(self.file, 'a+', encoding='utf-8') as f:
             yaml.dump(data, f)
         return
@@ -127,6 +157,16 @@ class Profile:
         data = self.get(key)
         del data[key]
         self.set_all(data)
+        return None
+    
+    def register_callback(self, callback: Callable[[OperationType, OperationData], Any]):
+        '''注册回调函数，当操作配置文件时调用'''
+        self.callback = callback
+        return None
+    
+    def unregister_callback(self):
+        '''注销回调函数'''
+        self.callback = None
         return None
 
 if __name__ == '__main__':
