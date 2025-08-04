@@ -578,11 +578,11 @@ class MainWindow(QWidget):
         except pywintypes.error as e:
             # 捕获 pywintypes.error 异常，该异常可能由于 非原子操作的判断 导致 判断结束时窗口已被销毁
             if e.winerror == 87:
-                print("发生已知错误：窗口已被销毁或无效")
+                print("[INFO]  发生已知错误：窗口已被销毁或无效")
             elif e.winerror == 1400:
-                print("发生已知错误：无效的窗口句柄")
+                print("[INFO]  发生已知错误：无效的窗口句柄")
             else:
-                print(f"发生错误：{e}")
+                print(f"[ERROR] 更新窗口属性时发生错误：{traceback.format_exc()}")
             self.init_overlay_attribute()
             self.select_pid, self.select_hwnd = None, None
             if self.TOW_obj:
@@ -606,26 +606,9 @@ class MainWindow(QWidget):
             # 若句柄无效，则重置数据
             self.init_overlay_attribute()
             return
-        if self.last_hwnd == self.select_hwnd:
-            # 若 当前被覆盖窗口 与 上一次选中窗口 相同，则：
-            # 将 当前被覆盖窗口 取消置顶，防止覆盖 蒙版窗口
-            win32gui.SetWindowPos(
-                self.select_hwnd, win32con.HWND_NOTOPMOST, 0, 0, 0, 0,
-                win32con.SWP_NOMOVE | 
-                win32con.SWP_NOSIZE
-            )
-            return
         
         # 若 当前被覆盖窗口 为 新选择的窗口，则获取其位置信息
         left, top, _, _, width, height = self.get_pos(self.select_hwnd)
-
-        # 将上一个被覆盖窗口置顶状态恢复
-        if self.IsWindow(self.last_hwnd):
-            win32gui.SetWindowPos(
-                self.last_hwnd, win32con.HWND_TOPMOST if self.last_window_is_top else win32con.HWND_NOTOPMOST, 0, 0, 0, 0, # type: ignore
-                win32con.SWP_NOMOVE |
-                win32con.SWP_NOSIZE
-            )
 
         self.last_hwnd = self.select_hwnd
         self.last_window_is_top = bool(win32gui.GetWindowLong(self.select_hwnd, win32con.GWL_EXSTYLE) & win32con.WS_EX_TOPMOST)
@@ -674,13 +657,6 @@ class MainWindow(QWidget):
         '''暂停获取窗口信息'''
         self.is_getting_info = False
         self.start_get_window_button.setText("开始获取")
-        if self.last_hwnd:
-            # 将上一个被覆盖窗口置顶状态恢复
-            win32gui.SetWindowPos(
-                self.last_hwnd, win32con.HWND_TOPMOST if self.last_window_is_top else win32con.HWND_NOTOPMOST, 0, 0, 0, 0,
-                win32con.SWP_NOMOVE | 
-                win32con.SWP_NOSIZE
-            )
         if self.TOW_obj:
             self.TOW_obj.hide()
 
@@ -885,7 +861,7 @@ def run_again_as_admin(parent = None) -> None:
         print("[ERROR] 提升权限失败!")
         QMessageBox.critical(parent, "错误", "提升权限失败!")
     else:
-        sys.exit(0)
+        ctypes.windll.kernel32.ExitProcess(0)
 
 
 def get_file_path(file_path: str):
