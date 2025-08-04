@@ -567,7 +567,7 @@ class MainWindow(QWidget):
             self.start_get_window_button.setText("开始获取")
             self.is_getting_info = False
         else:
-            self.update_sele_wind_timer.start(0)
+            self.update_sele_wind_timer.start(50)
             self.start_get_window_button.setText("停止获取")
             self.showMinimized()
             self.is_getting_info = True
