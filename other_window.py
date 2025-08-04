@@ -108,18 +108,35 @@ class input_box_window(QDialog):
 #         self.close_window_callback(self)
 #         return super().closeEvent(a0)
 
+def MessageBox(parent: None | QWidget = None, title: str = '提示', top_info: str = '', info: str = '', icon: QMessageBox.Information | QMessageBox.Warning | QMessageBox.Critical | QMessageBox.Question = QMessageBox.Information, buttons: tuple | list = ('确定', )) -> str | None:
+    '''弹出文本框'''
+    mes = QMessageBox(parent)
+    mes.addButton(QPushButton(buttons[0]), QMessageBox.YesRole)
+    if len(buttons) > 1:
+        mes.addButton(QPushButton(buttons[1]), QMessageBox.NoRole)
+    if len(buttons) > 2:
+        for button in buttons[2:]:
+            mes.addButton(QPushButton(button))
+    mes.setWindowTitle(title)
+    mes.setText(top_info)
+    mes.setInformativeText(info)
+    mes.setIcon(icon)
+    mes.exec()
+    choose_button = mes.clickedButton()
+    return None if choose_button is None else choose_button.text()
 
-MessageBox = \
+MessageBox1 = \
     lambda parent, top_info, info='', title='提示', icon=QMessageBox.Information, buttons=("确定", ): (
         mes := QMessageBox(parent),
-        mes.addButton(QPushButton(buttons[0]), QMessageBox.ActionRole),
-        (mes.addButton(QPushButton(button)) for button in buttons[1:]) if len(buttons) > 1 else None,
+        mes.addButton(QPushButton(buttons[0]), QMessageBox.YesRole),
+        mes.addButton(QPushButton(buttons[1]), QMessageBox.NoRole) if len(buttons) > 1 else None,
+        (mes.addButton(QPushButton(button)) for button in buttons[2:]) if len(buttons) > 2 else None,
         mes.setWindowTitle(title),
         mes.setText(top_info),
         mes.setInformativeText(info),
         mes.setIcon(icon),
         mes.exec(),
-    )[0]
+    )[-1]
 
 
 if __name__ == '__main__':
@@ -135,12 +152,12 @@ if __name__ == '__main__':
     #     input_box_tip='请在此处输入...',
     #     button_click_callback = a,
     # ).exec_()
-    window = MessageBox(
+    res = MessageBox(
         parent=None,
         title='这是标题',
         top_info='这是顶部信息',
         info='这是一个输入框',
         buttons=('确定', '取消'),
     )
-    window.show()
+    print(res)
     app.exec()

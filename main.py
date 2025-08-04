@@ -3,7 +3,7 @@ from transparent_overlay_window import TransparentOverlayWindow as TOW
 from PyQt5.QtWidgets import QApplication, QMessageBox, QWidget, QVBoxLayout, QGridLayout, QLabel, QPushButton, QFormLayout, QHBoxLayout, QDialog, QLineEdit, QCheckBox, QSizePolicy
 from PyQt5.QtGui import QCloseEvent, QIcon, QDoubleValidator, QFontMetrics
 from PyQt5.QtCore import QEvent, Qt, QTimer, pyqtSignal
-from api import get_top_window_under_mouse, get_window_pos_and_size, get_file_path
+from api import get_top_window_under_mouse, get_window_pos_and_size, get_file_path, load_uia_lib, get_session_id
 from buttonbox import main as show_buttonbox
 from kill_process import kill_process
 from delete_file import delete_file
@@ -11,10 +11,10 @@ from suspend_process import suspend_process, resume_process
 from other_window import input_box_window, MessageBox
 from operation_profile import Profile as ProfileClass, OperationType, OperationData
 from observe_window import ObserveWindow
-from call_run_dialog import RunFileDlg
+from call_run_dialog import ShowRunDialog
 from typing import Any, Dict, Literal, List, Callable, NoReturn, Iterable
+from ctypes import wintypes
 import sys, win32gui, win32con, win32process, psutil, keyboard, ctypes, os, traceback, pywintypes, time, threading, webbrowser, re, argparse, functools
-from uiaapi import get_current_session_id, load_uia
 
 
 class MainWindow(QWidget):
@@ -223,8 +223,7 @@ class MainWindow(QWidget):
             if success and profile_obj['set_up']['show_info_box']:
                 MessageBox(
                     self,
-                    "操作成功完成",
-                    '',
+                    top_info="操作成功完成",
                     title="提示",
                     icon=QMessageBox.Information,
                     buttons=("确定", )
@@ -232,8 +231,8 @@ class MainWindow(QWidget):
             elif profile_obj['set_up']['show_error_box']:
                 MessageBox(
                     self,
-                    "尝试执行操作时发生错误",
-                    '' if code is None else f'错误代码: {code}',
+                    top_info="尝试执行操作时发生错误",
+                    info='' if code is None else f'错误代码: {code}',
                     title="错误",
                     icon=QMessageBox.Critical, buttons=("确定", )
                 ) if profile_obj['set_up']['show_error_box'] else None
@@ -345,7 +344,7 @@ class MainWindow(QWidget):
             [
                 QPushButton('运行外部程序'),
                 lambda: (
-                    res := RunFileDlg(self.winId(), None, None, "运行", "子逸 将根据你所输入的名称，为你打开相应的程序、文件夹、文档或 Internet 资源。", 0),
+                    res := ShowRunDialog(self.winId(), None, None, "运行", "子逸 将根据你所输入的名称，为你打开相应的程序、文件夹、文档或 Internet 资源。", 0),
                     MessageBox(parent=self, title="错误", top_info="无法获取函数地址于 shell32.dll 上", info="", icon=QMessageBox.Critical) if not res and profile_obj['set_up']['show_error_box'] else None
                 ),
                 {'need': {'pid': False, 'hwnd': False}}
@@ -830,16 +829,19 @@ class SetUpWindow(QDialog):
         self.keep_work_input_box.textChanged.connect(self.slot_of_keep_work_input_box)
         self.set_up_items_layout.addRow(QLabel("强制前台间隔时间(s)"), self.keep_work_input_box)
 
-        # 添加 是否显示信息/警告/错误文本框 多选框
-        self.show_message_boxes = {
-            "show_info_box":     ('是否显示信息对话框', QCheckBox("")),
-            "show_warning_box":  ('是否显示警告对话框', QCheckBox("")),
-            "show_error_box":    ('是否显示错误对话框', QCheckBox("")),
+        # 添加多选框
+        self.check_boxes = {
+            "on_top_with_UIAccess": ('是否使用 UIAccess 超级置顶', QCheckBox(), {'restart': True}),
+            "show_info_box":        ('是否显示信息对话框', QCheckBox()),
+            "show_warning_box":     ('是否显示警告对话框', QCheckBox()),
+            "show_error_box":       ('是否显示错误对话框', QCheckBox()),
         }
-        for k, v in self.show_message_boxes.items():
+        self.setting_check_boxes = False
+        '''正在设置多选框选中状态'''
+        for k, v in self.check_boxes.items():
             v[1].setCheckState(Qt.Checked if self.set_up_data[k] else Qt.Unchecked) # type: ignore
             v[1].stateChanged.connect(functools.partial(self.slot_of_show_message_boxes, k))
-            self.set_up_items_layout.addRow(*v)
+            self.set_up_items_layout.addRow(*v[:2])
 
         # 将 设置表单布局 添加至 主布局
         self.main_layout.addLayout(self.set_up_items_layout)
@@ -867,8 +869,26 @@ class SetUpWindow(QDialog):
             pass
     
     def slot_of_show_message_boxes(self, k: str) -> None:
-        '''是否显示 信息/警告/错误对话框 多选框槽函数'''
-        self.set_up_data[k] = self.show_message_boxes[k][1].isChecked()
+        '''多选框槽函数'''
+        if self.setting_check_boxes:
+            # 程序正在设置状态，不做处理
+            return
+        if len(self.check_boxes[k]) == 3:
+            # 有自定义配置项
+            if self.check_boxes[k][2].get('restart', False):
+                # 需重启生效，提示用户
+                choose = MessageBox(parent=self, title="提示", top_info=f"该更改将在重启后生效", info='是否重启？', icon=QMessageBox.Information, buttons=("重启", "取消"))
+                if choose == '重启':
+                    # 保存设置并重启
+                    # TODO
+                    ...
+                else:
+                    # 还原更改
+                    self.setting_check_boxes = True
+                    self.check_boxes[k][1].setCheckState(Qt.Unchecked if self.check_boxes[k][1].isChecked() else Qt.Checked) # type: ignore
+                    self.setting_check_boxes = False
+                    return
+        self.set_up_data[k] = self.check_boxes[k][1].isChecked()
 
     def slot_of_ok_button(self) -> None:
         '''确认按钮槽函数'''
@@ -947,7 +967,7 @@ def is_admin() -> bool:
     except:
         return False
     
-def run_again_as_admin(parent: object | None = None, args = '') -> None:
+def run_again_as_admin(parent: QWidget | None = None, args = '') -> None:
     '''以管理员身份重新运行当前程序'''
     # 请求UAC提权
     if getattr(sys, 'frozen', False):
@@ -977,74 +997,90 @@ def exit_the_app(code: int = 0) -> NoReturn:
         main_window.observe_obj.stop()
     os._exit(code)
 
+def init() -> argparse.Namespace | None:
+    '''初始化'''
+    global profile_obj, command_line_args
+    # 读取配置文件
+    profile_obj = ProfileClass(get_file_path("data\\profile\\data.yaml"))
+    default_profile = \
+    {
+        'set_up': {
+            'on_top_time': -1.0,                # 强制置顶间隔时间
+            'on_top_with_UIAccess': True,      # 是否启用 UIAccess 超级置顶
+            'keep_work_time': -1.0,             # 强制前台间隔时间
+            'show_info_box': True,              # 是否显示信息文本框
+            'show_warning_box': True,           # 是否显示警告文本框
+            'show_error_box': True,             # 是否显示错误文本框
+        }
+    }
+    # 设置默认值
+    profile_obj.set_default(default_profile)
+    if not profile_obj.check_file():
+        print("配置文件不存在或存在错误，尝试重置...")
+        if profile_obj.file_exists():
+            os.remove(get_file_path("data\\profile\\data.yaml"))
+        try:
+            profile_obj.create(default_profile)
+            print("重置成功")
+        except Exception:
+            print(f"重置配置文件时发生异常:\n{traceback.format_exc()}")
+            while True:
+                time.sleep(1)
+            os._exit(0)
+    
+    # 解析命令行参数
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--hwnd', type=int, default=None, help='需选中窗口的句柄')
+    command_line_args = parser.parse_args()
+    if is_admin() and profile_obj['set_up']['on_top_with_UIAccess']:
+        print('[TRACE] 尝试启用 UIAccess...')
+        try:
+            # 加载 UIAccess 库
+            load_res = load_uia_lib()
+            if load_res is None:
+                MessageBox(parent=None, title="错误", top_info="尝试启用 UIAccess 时发生错误，详情请查阅日志", icon=QMessageBox.Critical)
+                return None
+            _, IsUIA, StartUIA = load_res
+            if not IsUIA():
+                if getattr(sys, 'frozen', False):
+                    # 打包环境
+                    exe_path = sys.executable
+                    params = 'app'
+                else:
+                    # 非打包环境
+                    exe_path = sys.executable
+                    script_path = os.path.abspath(__file__)
+                    params = f'pythonw "{script_path}"'
+                if command_line_args.hwnd:
+                    params += f' --hwnd={command_line_args.hwnd}'
+                pid = wintypes.DWORD(0)
+                if not StartUIA(exe_path, params, 0, ctypes.byref(pid), get_session_id()):
+                    raise ctypes.WinError(ctypes.get_last_error())
+                else:
+                    print(f'[TRACE] UIAccess 启动成功，PID: {pid.value}')
+                    ctypes.windll.kernel32.ExitProcess(0)
+            else:
+                print('[TRACE] UIAccess 已启用')
+        except Exception:
+            print(f'[WARN]  UIAccess 加载失败:\n{traceback.format_exc()}')
+            return None
+
 
 if __name__ == "__main__":
     try:
-        # 解析命令行参数
-        parser = argparse.ArgumentParser()
-        parser.add_argument('--hwnd', type=int, default=None, help='需选中窗口的句柄')
-        args = parser.parse_args()
-        if is_admin():
-            print('[TRACE] 试图启用 UIAccess...')
-            try:
-                uiaccess, IsUIA, StartUIA = load_uia()
-                if not IsUIA():
-                    if getattr(sys, 'frozen', False):
-                        # 打包环境
-                        exe_path = sys.executable
-                        params = 'app'
-                    else:
-                        # 非打包环境
-                        exe_path = sys.executable
-                        script_path = os.path.abspath(__file__)
-                        params = f'pythonw "{script_path}"'
-                    if args.hwnd:
-                        params += f' --hwnd={args.hwnd}'
-                    
-                    from ctypes import wintypes
-                    pid = wintypes.DWORD(0)
-                    if not StartUIA(exe_path, params, 0, ctypes.byref(pid), get_current_session_id()):
-                        raise ctypes.WinError(ctypes.get_last_error())
-                    else:
-                        print(f'[TRACE] UIAccess 启动成功，PID: {pid.value}')
-                        ctypes.windll.kernel32.ExitProcess(0)
-                else:
-                    print('[TRACE] UIAccess 已启用')
-            except Exception as e:
-                print(f'[WARN]  UIAccess 加载失败: {e}')
-        # 读取配置文件
-        profile_obj = ProfileClass(get_file_path("data\\profile\\data.yaml"))
-        default_profile = \
-        {
-            'set_up': {
-                'on_top_time': -1.0,        # 强制置顶间隔时间
-                'keep_work_time': -1.0,     # 强制前台间隔时间
-                'show_info_box': True,      # 是否显示信息文本框
-                'show_warning_box': True,   # 是否显示警告文本框
-                'show_error_box': True,     # 是否显示错误文本框
-            }
-        }
-        # 设置默认值
-        profile_obj.set_default(default_profile)
-        if not profile_obj.check_file():
-            print("配置文件不存在或存在错误，尝试重置...")
-            if profile_obj.file_exists():
-                os.remove(get_file_path("data\\profile\\data.yaml"))
-            try:
-                profile_obj.create(default_profile)
-                print("重置成功")
-            except Exception as e:
-                print(f"重置配置文件时发生异常: {e}")
-                os._exit(0)
+        # 初始化程序
+        init()
         # 创建应用程序实例
         app = QApplication(sys.argv)
         main_window = MainWindow()
         # 根据命令行参数修改选中窗口
-        if args.hwnd and main_window.IsWindow(select_hwnd := int(args.hwnd)):
+        if command_line_args.hwnd and main_window.IsWindow(select_hwnd := int(command_line_args.hwnd)):
             main_window.select_hwnd = select_hwnd
             main_window.select_pid = win32process.GetWindowThreadProcessId(main_window.select_hwnd)[1]
             main_window.chose_window()
+        # 显示窗口
         main_window.show()
+        # 运行应用程序事件循环
         exit_the_app(app.exec())
     except:
         print(traceback.format_exc())

@@ -43,7 +43,7 @@ else:
     RunFileDlg_win32 = None
     print("Failed to get function address")
 
-def RunFileDlg(hwndOwner, hIcon, lpstrDirectory, lpstrTitle, lpstrDescription, uFlags) -> bool:
+def ShowRunDialog(hwndOwner, hIcon, lpstrDirectory, lpstrTitle, lpstrDescription, uFlags) -> bool:
     if RunFileDlg_win32 is None:
         return False
     RunFileDlg_win32(int(hwndOwner), hIcon, lpstrDirectory, lpstrTitle, lpstrDescription, uFlags)

@@ -132,6 +132,9 @@ class Profile:
         '''创建配置文件'''
         if self.callback and using_callback:
             self.callback(OperationType.CREATE, {"path": self.file, "new_value": data})
+        # 创建文件的祖先目录
+        os.makedirs(self.file.parent, exist_ok=True)
+        # 创建文件
         with open(self.file, 'a+', encoding='utf-8') as f:
             yaml.dump(data, f)
         return

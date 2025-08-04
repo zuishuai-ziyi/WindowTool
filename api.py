@@ -1,4 +1,6 @@
-import win32gui, win32api, win32process, win32con, os, sys
+import win32gui, win32api, win32process, win32con, os, sys, ctypes, traceback
+from ctypes import wintypes
+from pathlib import Path
 
 def get_top_window_under_mouse(exclude_hwnds: list[int] | None = None) -> tuple[int, int]:
     '''获取鼠标处顶层窗口PID及句柄'''
@@ -47,4 +49,49 @@ def get_window_pos_and_size(hwnd) -> tuple[int, int, int, int, int, int]:
 
 def get_file_path(file_path: str):
     """获取资源文件实际绝对路径"""
-    return os.path.join(sys._MEIPASS if hasattr(sys, '_MEIPASS') else os.path.abspath("."), file_path) # type: ignore
+    return str(
+            Path(
+                sys._MEIPASS if hasattr(sys, '_MEIPASS') else __file__  # type: ignore
+            ).parent.resolve() / Path(file_path)
+    )
+
+def load_uia_lib():
+    '''加载 uia.dll'''
+    try:
+        lib_name = 'uia.dll'
+        UIAccessLib = ctypes.WinDLL(get_file_path(lib_name), use_last_error=True)
+
+        # 定义函数原型
+        IsUIAccess = UIAccessLib.IsUIAccess
+        IsUIAccess.argtypes = []
+        IsUIAccess.restype = wintypes.BOOL
+
+        StartUIAccessProcess = UIAccessLib.StartUIAccessProcess
+        StartUIAccessProcess.argtypes = [
+            wintypes.LPCWSTR,  # lpApplicationName
+            wintypes.LPCWSTR,  # lpCommandLine
+            wintypes.DWORD,    # flag
+            ctypes.POINTER(wintypes.DWORD),  # pPid
+            wintypes.DWORD     # dwSession
+        ]
+        StartUIAccessProcess.restype = wintypes.BOOL
+    except Exception:
+        print(f'加载 {lib_name} 失败:\n{traceback.format_exc()}')
+        return None
+    return UIAccessLib, IsUIAccess, StartUIAccessProcess
+
+def get_session_id() -> int:
+    '''获取当前会话的ID'''
+    kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+    
+    # 定义函数原型
+    ProcessIdToSessionId = kernel32.ProcessIdToSessionId
+    ProcessIdToSessionId.argtypes = [wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+    ProcessIdToSessionId.restype = wintypes.BOOL
+
+    # 获取会话ID
+    session_id = wintypes.DWORD(0)
+    if not ProcessIdToSessionId(os.getpid(), ctypes.byref(session_id)):
+        raise ctypes.WinError(ctypes.get_last_error())
+
+    return session_id.value
