@@ -4,7 +4,6 @@ from PyQt5.QtGui import QCloseEvent, QIcon, QDoubleValidator, QFontMetrics
 from PyQt5.QtCore import QEvent, Qt, QTimer, pyqtSignal
 from global_value import *
 from api import get_top_window_under_mouse, get_window_pos_and_size, get_file_path, load_UIAccess_lib, get_session_id
-from buttonbox import main as show_buttonbox
 from kill_process import kill_process
 from delete_file import delete_file
 from suspend_process import suspend_process, resume_process
@@ -16,16 +15,17 @@ from typing import Any, Dict, Literal, List, Callable, NoReturn, Iterable
 from ctypes import wintypes
 import sys, win32gui, win32con, win32process, psutil, keyboard, ctypes, os, traceback, pywintypes, time, threading, webbrowser, re, argparse, functools, subprocess
 
+# TODO 修复BUG：选择窗口时主窗口输入框可用
 
 class MainWindow(QWidget):
     '''主窗口'''
     def __init__(self) -> None:
         super().__init__()
 
-        # 创建计时器，用于更新选中窗口信息
+        # 创建计时器，用于在选择时更新窗口信息
         self.update_sele_wind_timer = QTimer(self)
         self.update_sele_wind_timer.timeout.connect(self.slot_of_update_selected_window_info)
-        # 创建计时器，用于更新窗口
+        # 创建计时器，用于更新窗口并记录选中窗口信息至文件
         self.update_window_timer = QTimer(self)
         self.update_window_timer.timeout.connect(self.slot_of_update_window)
         # 创建计时器组，用于更新窗口属性
@@ -440,7 +440,7 @@ class MainWindow(QWidget):
     def set_window_border(self, hwnd, borderless: bool | None = None) -> None:
         '''设置窗口为无边框或恢复边框，设置 borderless 为 None 以切换状态'''
         style = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE)
-        has_border = style & (win32con.WS_BORDER | win32con.WS_THICKFRAME)
+        has_border = style & (win32con.WS_CAPTION | win32con.WS_THICKFRAME)
         if borderless or (borderless is None and has_border):
             # 移除边框和标题栏
             style &= ~win32con.WS_CAPTION
@@ -450,14 +450,23 @@ class MainWindow(QWidget):
             style |= win32con.WS_CAPTION
             style |= win32con.WS_THICKFRAME
         win32gui.SetWindowLong(hwnd, win32con.GWL_STYLE, style)
-        # 触发窗口刷新
+        # 移动窗口并还原以触发窗口刷新
+        left, top, _, _, width, height = self.get_pos(hwnd)
         win32gui.SetWindowPos(
-            hwnd, None, 0, 0, 0, 0,
-            win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOZORDER | win32con.SWP_FRAMECHANGED
+            hwnd, None, left+1, top+1, width+1, height+1,
+            0
+        )
+        win32gui.SetWindowPos(
+            hwnd, None, left, top, width, height,
+            0
         )
 
     def record_window_info(self, hwnd: int):
         '''记录窗口信息至配置文件'''
+        # log.debug(f'窗口句柄：{hwnd}, {self.IsWindow(hwnd)}')
+        if not self.IsWindow(hwnd):
+            # log.debug(f'无效的窗口句柄：{hwnd}')
+            return
         # 更新配置文件
         try:
             infos = profile_obj['select_window_info']  # 获取所有记录的窗口信息
@@ -465,11 +474,11 @@ class MainWindow(QWidget):
             for item in infos:
                 # 枚举，检查当前窗口是否已记录
                 if item['id']['class_name'] == win32gui.GetClassName(hwnd) or item['id']['title'] == win32gui.GetWindowText(hwnd):
-                    log.debug(f'已记录的窗口：{item["id"]["class_name"]} - {item["id"]["title"]}')
+                    # log.debug(f'已记录的窗口：{item["id"]["class_name"]} - {item["id"]["title"]}')
                     set_item = item
                     break
             else:
-                log.debug(f'未记录的窗口：{win32gui.GetClassName(hwnd)} - {win32gui.GetWindowText(hwnd)}')
+                # log.debug(f'未记录的窗口：{win32gui.GetClassName(hwnd)} - {win32gui.GetWindowText(hwnd)}')
                 # 无记录，添加记录
                 infos.append({})
                 set_item = infos[-1]
@@ -480,7 +489,8 @@ class MainWindow(QWidget):
             left, top, _, _, width, height = get_window_pos_and_size(hwnd)
             set_item['pos'] = [left, top]
             set_item['size'] = [width, height]
-            set_item['has_frame'] = bool(win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE) & (win32con.WS_BORDER | win32con.WS_THICKFRAME))
+            has_border = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE) & (win32con.WS_CAPTION | win32con.WS_THICKFRAME)
+            set_item['has_frame'] = bool(has_border)
             set_item['display_state'] = win32gui.GetWindowPlacement(hwnd)[1]
             set_item['show'] = bool(win32gui.IsWindowVisible(hwnd))
             set_item['is_top'] = bool(win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE) & win32con.WS_EX_TOPMOST)
@@ -488,6 +498,41 @@ class MainWindow(QWidget):
             profile_obj.set('select_window_info', infos)
         except:
             log.error(f'更新窗口信息时发生错误:\n{traceback.format_exc()}')
+
+    def use_window_info(self, hwnd: int) -> None:
+        '''应用窗口信息'''
+        try:
+            # 获取窗口信息
+            infos = profile_obj['select_window_info']  # 获取所有记录的窗口信息
+            for item in infos:
+                log.debug(f'枚举窗口信息：{item}')
+                # 枚举，检查当前窗口是否已记录
+                if item['id']['class_name'] == win32gui.GetClassName(hwnd) or item['id']['title'] == win32gui.GetWindowText(hwnd):
+                    log.debug(f'应用已记录的窗口信息：{item["id"]["class_name"]} - {item["id"]["title"]}')
+                    # 更新窗口信息
+                    if item['display_state'] != 2:
+                        # 不为最小化，设置位置
+                        win32gui.SetWindowPos(
+                            hwnd, None, item['pos'][0], item['pos'][1], item['size'][0], item['size'][1],
+                            win32con.SWP_NOZORDER | win32con.SWP_FRAMECHANGED
+                        )
+                    # 设置边框
+                    self.set_window_border(hwnd, not item['has_frame'])
+                    # 设置显示状态
+                    win32gui.ShowWindow(hwnd, item['display_state'])
+                    # 设置置顶状态
+                    win32gui.SetWindowPos(
+                        hwnd, win32con.HWND_TOPMOST if item['is_top'] else win32con.HWND_NOTOPMOST, 0, 0, 0, 0,
+                        win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOZORDER | win32con.SWP_FRAMECHANGED
+                    )
+                    # 设置显示状态
+                    win32gui.ShowWindow(hwnd, win32con.SW_SHOW if item['show'] else win32con.SW_HIDE)
+                    break
+            else:
+                log.debug(f'窗口无历史记录：{win32gui.GetClassName(hwnd)} - {win32gui.GetWindowText(hwnd)}')
+                # 无记录，不做更改
+        except:
+            log.error(f'应用窗口信息时发生错误:\n{traceback.format_exc()}')
 
     def chose_window(self) -> None:
         '''已选择窗口'''
@@ -512,8 +557,13 @@ class MainWindow(QWidget):
                 run_again_as_admin(self, f'--hwnd={self.select_hwnd}')
         else:
             ctypes.windll.kernel32.CloseHandle(phandle) # 关闭句柄
+        # 应用记录的窗口信息
+        log.debug(f'边框 {profile_obj["select_window_info"][0]["has_frame"]}')
+        self.use_window_info(self.select_hwnd) # type: ignore
+        log.debug(f'边框 {profile_obj["select_window_info"][0]["has_frame"]}')
         # 记录窗口信息
         self.record_window_info(self.select_hwnd) # type: ignore
+        log.debug(f'边框 {profile_obj["select_window_info"][0]["has_frame"]}')
         # 更新数据
         self.select_obj = psutil.Process(self.select_pid)
         self.select_process_info['suspend'] = False
@@ -598,7 +648,7 @@ class MainWindow(QWidget):
             self.showNormal()
 
     def slot_of_update_window(self):
-        '''更新窗口'''
+        '''更新窗口 / 信息'''
         # 重绘窗口，防止恶意软件的特效覆盖
         self.update()
         # 更新输入框
@@ -611,6 +661,10 @@ class MainWindow(QWidget):
 
         self.sel_wind_info_widgets['window_size']['obj'][1].setEnabled(select_is_window)
         self.sel_wind_info_widgets['window_size']['obj'][3].setEnabled(select_is_window)
+
+        # 更新选中窗口信息至文件
+        if not self.is_getting_info:
+            self.record_window_info(self.select_hwnd) # type: ignore
 
     def slot_of_size_title_pos_input_box_edit_finished(self) -> None:
         '''大小/位置/标题输入框 改变槽函数'''
@@ -692,7 +746,7 @@ class MainWindow(QWidget):
             self.is_getting_info = True
 
     def get_pos(self, hwnd):
-        '''获取窗口位置信息'''
+        '''获取窗口位置和尺寸信息 返回值格式：left, top, right, bottom, width, height'''
         return get_window_pos_and_size(hwnd)
 
     def slot_of_update_selected_window_info(self):
@@ -1118,7 +1172,8 @@ if __name__ == "__main__":
     except:
         log.critical(f"发生错误:\n{traceback.format_exc()}")
         if hasattr(sys, 'frozen'):
-            # 若为打包结果，则忽略异常
+            MessageBox(title='错误', top_info='发生未知错误', info=f'{traceback.format_exc()}', icon=QMessageBox.Critical)
+            # 若为打包结果，则提示
             exit_the_app()
         while 1:
             time.sleep(0.5)
