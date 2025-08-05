@@ -1,9 +1,4 @@
-import re
-import win32gui
-import win32con
-import threading
-import time
-import atexit, traceback
+import win32gui, threading, time, traceback
 from api import get_window_pos_and_size
 from typing import Callable, Self
 

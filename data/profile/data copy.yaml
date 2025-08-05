@@ -1,0 +1,24 @@
+set_up:
+  keep_work_time: -1.0
+  on_top_time: -1.0
+  on_top_with_UIAccess: false
+  show_error_box: true
+  show_info_box: true
+  show_warning_box: true
+  window_id: title
+select_window_info: [
+  {
+    id: {
+      title: '',
+      class_name: ''
+    },
+    pos: null,
+    size: null,
+    has_frame: false,
+    display_state: min,
+    show: true
+  },
+  {
+
+  }
+]

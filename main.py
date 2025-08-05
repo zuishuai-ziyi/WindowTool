@@ -9,7 +9,7 @@ from kill_process import kill_process
 from delete_file import delete_file
 from suspend_process import suspend_process, resume_process
 from other_window import input_box_window, MessageBox
-from operation_profile import Profile as ProfileClass, OperationType, OperationData
+from operation_profile import Profile as ProfileClass, OperationType, OperationData, TypeIgnore
 from observe_window import ObserveWindow
 from call_run_dialog import ShowRunDialog
 from typing import Any, Dict, Literal, List, Callable, NoReturn, Iterable
@@ -262,16 +262,9 @@ class MainWindow(QWidget):
                 )
             ],
             [
-                QPushButton('窗口无边框化'),
+                QPushButton('窗口无边框化/恢复'),
                 lambda pid, hwnd: (
-                    self.set_window_border(hwnd, True),
-                    _show_message_box(True),
-                )
-            ],
-            [
-                QPushButton('窗口边框恢复'),
-                lambda pid, hwnd: (
-                    self.set_window_border(hwnd, False),
+                    self.set_window_border(hwnd, None),
                     _show_message_box(True),
                 )
             ],
@@ -444,10 +437,11 @@ class MainWindow(QWidget):
         self.stop_and_start_timer('on_top', 'on_top_time')
         self.stop_and_start_timer('keep_work', 'keep_work_time')
 
-    def set_window_border(self, hwnd, borderless: bool = True) -> None:
-        '''设置窗口为无边框或恢复边框'''
+    def set_window_border(self, hwnd, borderless: bool | None = None) -> None:
+        '''设置窗口为无边框或恢复边框，设置 borderless 为 None 以切换状态'''
         style = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE)
-        if borderless:
+        has_border = style & (win32con.WS_BORDER | win32con.WS_THICKFRAME)
+        if borderless or (borderless is None and has_border):
             # 移除边框和标题栏
             style &= ~win32con.WS_CAPTION
             style &= ~win32con.WS_THICKFRAME
@@ -480,8 +474,8 @@ class MainWindow(QWidget):
         phandle = ctypes.windll.kernel32.OpenProcess(win32con.PROCESS_ALL_ACCESS, False, self.select_pid)
         if not phandle:
             # 无法访问目标进程
-            print(f"[WARN]  无法访问目标窗口的进程，可能是权限不足或进程已结束")
-            if MessageBox(parent=self, title='无法访问进程', top_info=f'无法访问进程 PID: {self.select_pid}，是否提权？', icon=QMessageBox.Critical) == QMessageBox.Yes:
+            print(f"[WARN]  无法访问目标窗口，可能是权限不足或进程已结束")
+            if MessageBox(parent=self, title='拒绝访问', top_info=f'无法访问进程 PID: {self.select_pid}，是否提权？', icon=QMessageBox.Critical, buttons=('是', '否')) == '是':
                 run_again_as_admin(self, f'--hwnd={self.select_hwnd}')
         else:
             ctypes.windll.kernel32.CloseHandle(phandle) # 关闭句柄
@@ -501,6 +495,39 @@ class MainWindow(QWidget):
             wait_time=0.1
         )
         self.observe_obj.start()
+        # 更新配置文件
+        try:
+            infos = profile_obj['select_window_info']  # 获取所有记录的窗口信息
+            set_item = {}  # 目标项
+            for item in infos:
+                # 枚举，检查当前窗口是否已记录
+                if item['id']['class_name'] == win32gui.GetClassName(self.select_hwnd) or item['id']['title'] == win32gui.GetWindowText(self.select_hwnd): # type: ignore
+                    set_item = item
+                    break
+            # 无记录，添加记录
+            infos.append({})
+            set_item = infos[-1]
+            # 更新记录
+            set_item['id'] = dict()
+            set_item['id']['class_name'] = win32gui.GetClassName(self.select_hwnd) # type: ignore
+            set_item['id']['title'] = win32gui.GetWindowText(self.select_hwnd) # type: ignore
+            left, top, _, _, width, height = get_window_pos_and_size(self.select_hwnd)
+            set_item['pos'] = [left, top]
+            set_item['size'] = [width, height]
+            set_item['has_frame'] = bool(win32gui.GetWindowLong(self.select_hwnd, win32con.GWL_STYLE) & (win32con.WS_BORDER | win32con.WS_THICKFRAME)) # type: ignore
+            set_item['display_state'] = win32gui.GetWindowPlacement(self.select_hwnd)[1]  # type: ignore
+            set_item['show'] = win32gui.IsWindowVisible(self.select_hwnd)  # type: ignore
+            set_item['is_top'] = self.last_window_is_top # type: ignore
+            # 写入配置文件
+            profile_obj.set('select_window_info', infos)
+        except:
+            print(f'[ERROR]  写入配置文件时发生错误：', traceback.format_exc())
+
+        # profile_obj['select_window_info'] = {
+        #     f'{win32gui.GetClassName(self.select_hwnd)}': {
+
+        #     }
+        # }
         # 更改显示信息
         self.update_input_box()
 
@@ -877,21 +904,31 @@ class SetUpWindow(QDialog):
             # 有自定义配置项
             if self.check_boxes[k][2].get('restart', False):
                 # 需重启生效，提示用户
-                choose = MessageBox(parent=self, title="提示", top_info=f"该更改将在重启后生效", info='是否重启？', icon=QMessageBox.Information, buttons=("重启", "取消"))
+                choose = MessageBox(parent=self, title="提示", top_info=f"该更改将在重启后生效", icon=QMessageBox.Information)
+                # choose = MessageBox(parent=self, title="提示", top_info=f"该更改将在重启后生效", info='是否重启？', icon=QMessageBox.Information, buttons=("重启", "取消"))
+                '''
                 if choose == '重启':
                     # 保存设置并重启
-                    # TODO
-                    ...
+                    self.set_up_data[k] = self.check_boxes[k][1].isChecked()
+                    self.save_change()
+                    exit_the_app(0, restart=True, restart_args=f'--hwnd="{main_window.select_hwnd}"')
                 else:
                     # 还原更改
                     self.setting_check_boxes = True
                     self.check_boxes[k][1].setCheckState(Qt.Unchecked if self.check_boxes[k][1].isChecked() else Qt.Checked) # type: ignore
                     self.setting_check_boxes = False
                     return
+                '''
+
         self.set_up_data[k] = self.check_boxes[k][1].isChecked()
 
     def slot_of_ok_button(self) -> None:
         '''确认按钮槽函数'''
+        self.save_change()
+        self.close_window()
+
+    def save_change(self):
+        '''保存设置'''
         # 关闭窗口并保存更改
         self.signal_save.emit(
             {
@@ -899,6 +936,9 @@ class SetUpWindow(QDialog):
                 "data": self.set_up_data
             }
         )
+
+    def close_window(self):
+        '''直接关闭窗口，不触发 closeEvent'''
         # 设置点击过确认按钮为True
         self.clicked_ok = True
         # 关闭窗口
@@ -987,14 +1027,30 @@ def run_again_as_admin(parent: QWidget | None = None, args = '') -> None:
         if profile_obj['set_up']['show_error_box']:
             MessageBox(parent=parent, title="错误", top_info="提升权限失败!")
     else:
-        ctypes.windll.kernel32.ExitProcess(0)
+        exit_the_app()
 
-def exit_the_app(code: int = 0) -> NoReturn:
+def exit_the_app(code: int = 0, restart: bool = False, restart_args: str = '') -> NoReturn:
     '''退出程序'''
     # 释放资源
-    if main_window.observe_obj and main_window.observe_obj.is_observing():
-        # 停止观察
-        main_window.observe_obj.stop()
+    try:
+        if main_window.observe_obj and main_window.observe_obj.is_observing():
+            # 停止观察
+            main_window.observe_obj.stop()
+    except Exception:
+        pass
+    if restart:
+        # 重启程序
+        if getattr(sys, 'frozen', False):
+            # 打包环境，运行可执行文件
+            executable = sys.executable
+            cmd = f"\"{executable}\" \"{restart_args}\""
+        else:
+            # 开发环境，使用解释器执行源代码
+            python = sys.executable
+            script = sys.argv[0]
+            cmd = f"{python} \"{script}\" {restart_args}"
+        print(f"[TRACE] 重启程序: {cmd}")
+        subprocess.Popen(cmd)
     os._exit(code)
 
 def init() -> argparse.Namespace | None:
@@ -1011,7 +1067,8 @@ def init() -> argparse.Namespace | None:
             'show_info_box': True,              # 是否显示信息文本框
             'show_warning_box': True,           # 是否显示警告文本框
             'show_error_box': True,             # 是否显示错误文本框
-        }
+        },
+        'select_window_info': TypeIgnore([])
     }
     # 设置默认值
     profile_obj.set_default(default_profile)
@@ -1024,14 +1081,15 @@ def init() -> argparse.Namespace | None:
             print("重置成功")
         except Exception:
             print(f"重置配置文件时发生异常:\n{traceback.format_exc()}")
-            while True:
-                time.sleep(1)
             os._exit(0)
     
     # 解析命令行参数
     parser = argparse.ArgumentParser()
-    parser.add_argument('--hwnd', type=int, default=None, help='需选中窗口的句柄')
+    parser.add_argument('--hwnd', type=str, default=None, help='需选中窗口的句柄')
     command_line_args = parser.parse_args()
+    # 验证命令行参数是否有效
+    if not(isinstance(command_line_args.hwnd, str) and command_line_args.hwnd.isnumeric()):
+        command_line_args.hwnd = None
     if is_admin() and profile_obj['set_up']['on_top_with_UIAccess']:
         print('[TRACE] 尝试启用 UIAccess...')
         try:
@@ -1058,12 +1116,11 @@ def init() -> argparse.Namespace | None:
                     raise ctypes.WinError(ctypes.get_last_error())
                 else:
                     print(f'[TRACE] UIAccess 启动成功，PID: {pid.value}')
-                    ctypes.windll.kernel32.ExitProcess(0)
+                    exit_the_app()
             else:
                 print('[TRACE] UIAccess 已启用')
         except Exception:
             print(f'[WARN]  UIAccess 加载失败:\n{traceback.format_exc()}')
-            return None
 
 
 if __name__ == "__main__":
