@@ -1,10 +1,9 @@
 from transparent_overlay_window import TransparentOverlayWindow as TOW
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QGridLayout, QLabel, QPushButton, QFormLayout, QHBoxLayout, QDialog, QLineEdit, QMessageBox
 from PyQt5.QtGui import QCloseEvent, QIcon, QDoubleValidator, QRegExpValidator, QPixmap
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QRegExp
-from operation_profile import Profile as ProfileClass
-from typing import Any, Dict, Literal, List, Callable, Never
-import sys, win32gui, win32con, psutil, keyboard, ctypes, os, traceback, pywintypes, time, pyautogui, functools
+from global_value import *
+from typing import Any, Callable
+import sys, pyautogui, functools
 
 class input_box_window(QDialog):
     def __init__(self, parent: None | QWidget = None, window_pos: tuple | None = None, window_size: tuple = (300, 100), title: str='', icon_path: str | None=None, info_text: str = '请输入数据', buttons: None | list | tuple = None, input_box_default_text: str = '', input_box_tip: str = '', input_text_chang_callback: None | Callable[['input_box_window', 'QLineEdit'], Any] = None, button_click_callback: None | Callable[['input_box_window', 'QPushButton', 'QLineEdit'], Any] = None, close_window_callback: None | Callable[['input_box_window', 'QLineEdit'], Any] = None) -> None:
@@ -16,13 +15,13 @@ class input_box_window(QDialog):
         self.setGeometry(*(middle_pos if window_pos is None else window_size), *window_size)
         # 设置属性
         self.input_text_chang_callback: Callable[['input_box_window', 'QLineEdit'], Any] = \
-            (lambda window, obj: print(obj.text())) \
+            (lambda window, obj: log.debug(obj.text())) \
             if input_text_chang_callback is None else input_text_chang_callback
         self.button_click_callback: Callable[['input_box_window', 'QPushButton', 'QLineEdit'], Any] = \
-            (lambda window, button_obj, input_box_obj: (window.close(), print(f"选择按钮文本：{button_obj.text()} || 输入框文本: {input_box_obj.text()}"))) \
+            (lambda window, button_obj, input_box_obj: (window.close(), log.debug(f"选择按钮文本：{button_obj.text()} || 输入框文本: {input_box_obj.text()}"))) \
             if button_click_callback is None else button_click_callback
         self.close_window_callback: Callable[['input_box_window', 'QLineEdit'], Any] = \
-            (lambda window, input_box_obj: print(f'窗口关闭 | 输入框文本: {input_box_obj.text()}')) \
+            (lambda window, input_box_obj: log.debug(f'窗口关闭 | 输入框文本: {input_box_obj.text()}')) \
             if close_window_callback is None else close_window_callback
         # 初始化界面
         self.initUI(['确定'] if buttons is None else buttons, input_box_default_text, input_box_tip, info_text)
@@ -53,7 +52,7 @@ class input_box_window(QDialog):
         self.setLayout(self.main_layout)
 
     def slot_of_buttons(self, button_obj: QPushButton) -> None:
-        print('点击', button_obj.text(), self.input_box.text(), id(self.button_click_callback))
+        log.debug('点击', button_obj.text(), self.input_box.text(), id(self.button_click_callback))
         self.button_click_callback(self, button_obj, self.input_box)
     
     def slot_of_input_box(self):

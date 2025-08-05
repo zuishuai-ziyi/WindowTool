@@ -2,6 +2,7 @@ import os, yaml, copy
 from enum import IntEnum, auto
 from typing import Any, Self, Dict, List, Type, NoReturn, Iterable, Callable, TypeVar
 from pathlib import Path
+from global_value import *
 
 class OperationType(IntEnum):
     '''操作类型'''
@@ -110,7 +111,6 @@ class Profile:
                 if not isinstance(elem1, elem2):
                     return False
         except ValueError:  # 长度不相等，返回 False
-            print('asdfsdfsadfdsfdfdffdfdd')
             return False
         return True
     

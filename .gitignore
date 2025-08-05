@@ -7,3 +7,5 @@ main.spec
 dist
 # Pyinstaller temp directory
 build
+*temp*
+*.log

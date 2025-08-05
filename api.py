@@ -1,6 +1,7 @@
 import win32gui, win32api, win32process, win32con, os, sys, ctypes, traceback
 from ctypes import wintypes
 from pathlib import Path
+from global_value import *
 
 def get_top_window_under_mouse(exclude_hwnds: list[int] | None = None) -> tuple[int, int]:
     '''获取鼠标处顶层窗口PID及句柄'''
@@ -76,7 +77,7 @@ def load_uia_lib():
         ]
         StartUIAccessProcess.restype = wintypes.BOOL
     except Exception:
-        print(f'加载 {lib_name} 失败:\n{traceback.format_exc()}')
+        log.warning(f'加载 {lib_name} 失败:\n{traceback.format_exc()}')
         return None
     return UIAccessLib, IsUIAccess, StartUIAccessProcess
 

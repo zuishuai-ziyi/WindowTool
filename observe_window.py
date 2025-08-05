@@ -1,6 +1,8 @@
 import win32gui, threading, time, traceback
 from api import get_window_pos_and_size
+from log import Log as logclass
 from typing import Callable, Self
+from global_value import *
 
 class ObserverError(Exception):
     '''观察器错误'''
@@ -72,9 +74,7 @@ class ObserveWindow:
         self.stop()
         if exc_type is Exception and issubclass(exc_type, ObserverError):
             # 观察器错误，忽略错误并打印警告
-            print(f"[WARNING] 观察器错误，详细错误信息如下: ")
-            traceback.print_tb(exc_tb)
-            print(f"  {exc_type.__name__}: {exc_val}")
+            log.warning(f"观察器错误，详细错误信息如下:\n{traceback.format_exc()}")
             return True
         return False
 

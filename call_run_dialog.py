@@ -1,7 +1,5 @@
 import ctypes
-from other_window import MessageBox
-from PyQt5.QtWidgets import QMessageBox
-from typing import Any
+from global_value import *
 
 # 正确定义函数原型
 kernel32 = ctypes.WinDLL('kernel32.dll', use_last_error=True)
@@ -41,7 +39,7 @@ if func_address:
 
 else:
     RunFileDlg_win32 = None
-    print("Failed to get function address")
+    log.warning("无法定位函数 RunFileDlg_win32 于动态链接库 shell32.dll 中")
 
 def ShowRunDialog(hwndOwner, hIcon, lpstrDirectory, lpstrTitle, lpstrDescription, uFlags) -> bool:
     if RunFileDlg_win32 is None:

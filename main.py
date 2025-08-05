@@ -1,4 +1,3 @@
-import subprocess
 from transparent_overlay_window import TransparentOverlayWindow as TOW
 from PyQt5.QtWidgets import QApplication, QMessageBox, QWidget, QVBoxLayout, QGridLayout, QLabel, QPushButton, QFormLayout, QHBoxLayout, QDialog, QLineEdit, QCheckBox, QSizePolicy
 from PyQt5.QtGui import QCloseEvent, QIcon, QDoubleValidator, QFontMetrics
@@ -12,9 +11,11 @@ from other_window import input_box_window, MessageBox
 from operation_profile import Profile as ProfileClass, OperationType, OperationData, TypeIgnore
 from observe_window import ObserveWindow
 from call_run_dialog import ShowRunDialog
+from log import Log as log_class
+from global_value import *
 from typing import Any, Dict, Literal, List, Callable, NoReturn, Iterable
 from ctypes import wintypes
-import sys, win32gui, win32con, win32process, psutil, keyboard, ctypes, os, traceback, pywintypes, time, threading, webbrowser, re, argparse, functools
+import sys, win32gui, win32con, win32process, psutil, keyboard, ctypes, os, traceback, pywintypes, time, threading, webbrowser, re, argparse, functools, subprocess
 
 
 class MainWindow(QWidget):
@@ -314,11 +315,11 @@ class MainWindow(QWidget):
             ],
             [
                 QPushButton('运行源文件'),
-                lambda pid, hwnd: os.startfile(self.select_obj.exe()) if self.select_obj else print('未选中窗口'),
+                lambda pid, hwnd: os.startfile(self.select_obj.exe()) if self.select_obj else log('未选中窗口'),
             ],
             [
                 QPushButton('源文件所在位置'),
-                lambda pid, hwnd: subprocess.Popen(f'explorer /select, "{self.select_obj.exe()}"') if self.select_obj else print('未选中窗口'),
+                lambda pid, hwnd: subprocess.Popen(f'explorer /select, "{self.select_obj.exe()}"') if self.select_obj else log('未选中窗口'),
             ],
             [
                 QPushButton('(取消)挂起所选进程'),
@@ -326,19 +327,19 @@ class MainWindow(QWidget):
                     (
                         resume_process(pid),
                         _set_attribute(self.select_process_info, 'suspend', False),
-                        print(f"已恢复进程 PID: {pid}")
+                        log(f"已恢复进程 PID: {pid}")
                     ) if self.select_process_info['suspend']
                     else (
                         suspend_process(pid),
                         _set_attribute(self.select_process_info, 'suspend', True),
-                        print(f"已挂起进程 PID: {pid}")
+                        log(f"已挂起进程 PID: {pid}")
                     ),
             ],
             [
                 QPushButton('运行外部程序'),
                 lambda: (
                     res := ShowRunDialog(self.winId(), None, None, "运行", "子逸 将根据你所输入的名称，为你打开相应的程序、文件夹、文档或 Internet 资源。", 0),
-                    MessageBox(parent=self, title="错误", top_info="无法获取函数地址于 shell32.dll 上", info="", icon=QMessageBox.Critical) if not res and profile_obj['set_up']['show_error_box'] else None
+                    MessageBox(parent=self, title="错误", top_info="无法定位函数 RunFileDlg_win32 于动态链接库 shell32.dll 中", info="", icon=QMessageBox.Critical) if not res and profile_obj['set_up']['show_error_box'] else None
                 ),
                 {'need': {'pid': False, 'hwnd': False}}
             ]
@@ -397,7 +398,7 @@ class MainWindow(QWidget):
                         else:
                             raise TypeError(f"处理 {item} 时发生错误：给定的列表长度为 {len(item)} 应为 2 或 3")
                     except Exception:
-                        print("[ERROR] 处理槽函数时发生错误：", traceback.format_exc())
+                        log.error("处理槽函数时发生错误：", traceback.format_exc())
                         return None
                 return res_func
             item[0].clicked.connect(make_slot(item[1], item)) # type: ignore
@@ -456,29 +457,64 @@ class MainWindow(QWidget):
             win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOZORDER | win32con.SWP_FRAMECHANGED
         )
 
+    def record_window_info(self, hwnd: int):
+        '''记录窗口信息至配置文件'''
+        # 更新配置文件
+        try:
+            infos = profile_obj['select_window_info']  # 获取所有记录的窗口信息
+            set_item = {}  # 目标项
+            for item in infos:
+                # 枚举，检查当前窗口是否已记录
+                if item['id']['class_name'] == win32gui.GetClassName(hwnd) or item['id']['title'] == win32gui.GetWindowText(hwnd):
+                    log.debug(f'已记录的窗口：{item["id"]["class_name"]} - {item["id"]["title"]}')
+                    set_item = item
+                    break
+            else:
+                log.debug(f'未记录的窗口：{win32gui.GetClassName(hwnd)} - {win32gui.GetWindowText(hwnd)}')
+                # 无记录，添加记录
+                infos.append({})
+                set_item = infos[-1]
+            # 更新记录
+            set_item['id'] = dict()
+            set_item['id']['class_name'] = win32gui.GetClassName(hwnd)
+            set_item['id']['title'] = win32gui.GetWindowText(hwnd)
+            left, top, _, _, width, height = get_window_pos_and_size(hwnd)
+            set_item['pos'] = [left, top]
+            set_item['size'] = [width, height]
+            set_item['has_frame'] = bool(win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE) & (win32con.WS_BORDER | win32con.WS_THICKFRAME))
+            set_item['display_state'] = win32gui.GetWindowPlacement(hwnd)[1]
+            set_item['show'] = bool(win32gui.IsWindowVisible(hwnd))
+            set_item['is_top'] = bool(win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE) & win32con.WS_EX_TOPMOST)
+            # 写入配置文件
+            profile_obj.set('select_window_info', infos)
+        except:
+            log.error(f'更新窗口信息时发生错误:\n{traceback.format_exc()}')
+
     def chose_window(self) -> None:
         '''已选择窗口'''
         # 判断句柄是否有效
         if not self.IsWindow(self.select_hwnd):
-            print(f'[LOG]   当前句柄“{self.select_hwnd}”无效')
+            log(f'当前句柄“{self.select_hwnd}”无效')
             return
         # 停止选择
         self.stop_get_info()
         self.init_overlay_attribute()
         # 输出状态
         chose_window_hwnd = self.select_hwnd
-        print(f"[LOG]   选中窗口句柄为：{chose_window_hwnd}")
+        log(f"选中窗口句柄为：{chose_window_hwnd}")
         # 正常显示
         self.showNormal()
         # 判断是否需要提权
         phandle = ctypes.windll.kernel32.OpenProcess(win32con.PROCESS_ALL_ACCESS, False, self.select_pid)
         if not phandle:
             # 无法访问目标进程
-            print(f"[WARN]  无法访问目标窗口，可能是权限不足或进程已结束")
+            log.warning(f"无法访问目标窗口，可能是权限不足或进程已结束")
             if MessageBox(parent=self, title='拒绝访问', top_info=f'无法访问进程 PID: {self.select_pid}，是否提权？', icon=QMessageBox.Critical, buttons=('是', '否')) == '是':
                 run_again_as_admin(self, f'--hwnd={self.select_hwnd}')
         else:
             ctypes.windll.kernel32.CloseHandle(phandle) # 关闭句柄
+        # 记录窗口信息
+        self.record_window_info(self.select_hwnd) # type: ignore
         # 更新数据
         self.select_obj = psutil.Process(self.select_pid)
         self.select_process_info['suspend'] = False
@@ -495,39 +531,6 @@ class MainWindow(QWidget):
             wait_time=0.1
         )
         self.observe_obj.start()
-        # 更新配置文件
-        try:
-            infos = profile_obj['select_window_info']  # 获取所有记录的窗口信息
-            set_item = {}  # 目标项
-            for item in infos:
-                # 枚举，检查当前窗口是否已记录
-                if item['id']['class_name'] == win32gui.GetClassName(self.select_hwnd) or item['id']['title'] == win32gui.GetWindowText(self.select_hwnd): # type: ignore
-                    set_item = item
-                    break
-            # 无记录，添加记录
-            infos.append({})
-            set_item = infos[-1]
-            # 更新记录
-            set_item['id'] = dict()
-            set_item['id']['class_name'] = win32gui.GetClassName(self.select_hwnd) # type: ignore
-            set_item['id']['title'] = win32gui.GetWindowText(self.select_hwnd) # type: ignore
-            left, top, _, _, width, height = get_window_pos_and_size(self.select_hwnd)
-            set_item['pos'] = [left, top]
-            set_item['size'] = [width, height]
-            set_item['has_frame'] = bool(win32gui.GetWindowLong(self.select_hwnd, win32con.GWL_STYLE) & (win32con.WS_BORDER | win32con.WS_THICKFRAME)) # type: ignore
-            set_item['display_state'] = win32gui.GetWindowPlacement(self.select_hwnd)[1]  # type: ignore
-            set_item['show'] = win32gui.IsWindowVisible(self.select_hwnd)  # type: ignore
-            set_item['is_top'] = self.last_window_is_top # type: ignore
-            # 写入配置文件
-            profile_obj.set('select_window_info', infos)
-        except:
-            print(f'[ERROR]  写入配置文件时发生错误：', traceback.format_exc())
-
-        # profile_obj['select_window_info'] = {
-        #     f'{win32gui.GetClassName(self.select_hwnd)}': {
-
-        #     }
-        # }
         # 更改显示信息
         self.update_input_box()
 
@@ -699,11 +702,11 @@ class MainWindow(QWidget):
         except pywintypes.error as e:
             # 捕获 pywintypes.error 异常，该异常可能由于 非原子操作的判断 导致 判断结束时窗口已被销毁
             if e.winerror == 87:
-                print("[INFO]  发生已知错误：窗口已被销毁或无效")
+                log("发生已知错误：窗口已被销毁或无效")
             elif e.winerror == 1400:
-                print("[INFO]  发生已知错误：无效的窗口句柄")
+                log("发生已知错误：无效的窗口句柄")
             else:
-                print(f"[ERROR] 更新窗口属性时发生错误：{traceback.format_exc()}")
+                log.error(f"更新窗口属性时发生错误：{traceback.format_exc()}")
             self.init_overlay_attribute()
             self.select_pid, self.select_hwnd = None, None
             if self.TOW_obj:
@@ -1023,7 +1026,7 @@ def run_again_as_admin(parent: QWidget | None = None, args = '') -> None:
     if ctypes.windll.shell32.ShellExecuteW(
         None, "runas", exe_path, params, None, 1 # SW_NORMAL
     ) <= 32:
-        print("[ERROR] 提升权限失败!")
+        log.error("提升权限失败!")
         if profile_obj['set_up']['show_error_box']:
             MessageBox(parent=parent, title="错误", top_info="提升权限失败!")
     else:
@@ -1049,40 +1052,14 @@ def exit_the_app(code: int = 0, restart: bool = False, restart_args: str = '') -
             python = sys.executable
             script = sys.argv[0]
             cmd = f"{python} \"{script}\" {restart_args}"
-        print(f"[TRACE] 重启程序: {cmd}")
+        log(f"重启程序: {cmd}")
         subprocess.Popen(cmd)
     os._exit(code)
 
+
 def init() -> argparse.Namespace | None:
     '''初始化'''
-    global profile_obj, command_line_args
-    # 读取配置文件
-    profile_obj = ProfileClass(get_file_path("data\\profile\\data.yaml"))
-    default_profile = \
-    {
-        'set_up': {
-            'on_top_time': -1.0,                # 强制置顶间隔时间
-            'on_top_with_UIAccess': True,      # 是否启用 UIAccess 超级置顶
-            'keep_work_time': -1.0,             # 强制前台间隔时间
-            'show_info_box': True,              # 是否显示信息文本框
-            'show_warning_box': True,           # 是否显示警告文本框
-            'show_error_box': True,             # 是否显示错误文本框
-        },
-        'select_window_info': TypeIgnore([])
-    }
-    # 设置默认值
-    profile_obj.set_default(default_profile)
-    if not profile_obj.check_file():
-        print("配置文件不存在或存在错误，尝试重置...")
-        if profile_obj.file_exists():
-            os.remove(get_file_path("data\\profile\\data.yaml"))
-        try:
-            profile_obj.create(default_profile)
-            print("重置成功")
-        except Exception:
-            print(f"重置配置文件时发生异常:\n{traceback.format_exc()}")
-            os._exit(0)
-    
+    global profile_obj, log, command_line_args
     # 解析命令行参数
     parser = argparse.ArgumentParser()
     parser.add_argument('--hwnd', type=str, default=None, help='需选中窗口的句柄')
@@ -1091,7 +1068,7 @@ def init() -> argparse.Namespace | None:
     if not(isinstance(command_line_args.hwnd, str) and command_line_args.hwnd.isnumeric()):
         command_line_args.hwnd = None
     if is_admin() and profile_obj['set_up']['on_top_with_UIAccess']:
-        print('[TRACE] 尝试启用 UIAccess...')
+        log('尝试启用 UIAccess...')
         try:
             # 加载 UIAccess 库
             load_res = load_uia_lib()
@@ -1115,12 +1092,12 @@ def init() -> argparse.Namespace | None:
                 if not StartUIA(exe_path, params, 0, ctypes.byref(pid), get_session_id()):
                     raise ctypes.WinError(ctypes.get_last_error())
                 else:
-                    print(f'[TRACE] UIAccess 启动成功，PID: {pid.value}')
+                    log(f'UIAccess 启动成功，PID: {pid.value}')
                     exit_the_app()
             else:
-                print('[TRACE] UIAccess 已启用')
+                log('UIAccess 已启用')
         except Exception:
-            print(f'[WARN]  UIAccess 加载失败:\n{traceback.format_exc()}')
+            log.warning(f'UIAccess 加载失败:\n{traceback.format_exc()}')
 
 
 if __name__ == "__main__":
@@ -1131,7 +1108,7 @@ if __name__ == "__main__":
         app = QApplication(sys.argv)
         main_window = MainWindow()
         # 根据命令行参数修改选中窗口
-        if command_line_args.hwnd and main_window.IsWindow(select_hwnd := int(command_line_args.hwnd)):
+        if command_line_args.hwnd and main_window.IsWindow(select_hwnd := int(command_line_args.hwnd)): # type: ignore
             main_window.select_hwnd = select_hwnd
             main_window.select_pid = win32process.GetWindowThreadProcessId(main_window.select_hwnd)[1]
             main_window.chose_window()
@@ -1140,11 +1117,12 @@ if __name__ == "__main__":
         # 运行应用程序事件循环
         exit_the_app(app.exec())
     except:
-        print(traceback.format_exc())
+        log.critical(f"发生错误:\n{traceback.format_exc()}")
         if hasattr(sys, 'frozen'):
             # 若为打包结果，则忽略异常
             exit_the_app()
         while 1:
             time.sleep(0.5)
 
+# 打包命令 建议使用 pack.bat 打包
 # pyinstaller main.py --noconsole --add-data "data:data" -i "D:\_ziyi_home_\ziyi_home\文件\code\python\wowo\开发中\windows\data\icon\window.png"

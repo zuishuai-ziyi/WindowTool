@@ -1,6 +1,7 @@
 import sys, functools, inspect
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QHBoxLayout, QLabel
 from typing import Any, Callable, Optional
+from global_value import *
 
 class ButtonboxWindow(QWidget):
     def __init__(self, exited_callback_func, clicked_callback_func, button_texts, tip_text, title, window_position, window_size):
@@ -81,13 +82,13 @@ def main(app_object:QApplication|None=None, run_app_exec:bool=False, exited_call
         app_object = QApplication(sys.argv)
     if clicked_callback_func is None:
         def func1(index:int|None, text:str|None, quit:Callable|None):
-            print(f"callback: {index} | {text}")
+            log.debug(f"callback: {index} | {text}")
             if quit:
                 quit()
         clicked_callback_func = func1
     if exited_callback_func is None:
         def func2(event):
-            print('exited')
+            log.debug('exited')
         exited_callback_func = func2
 
     obj = ButtonboxWindow(exited_callback_func, clicked_callback_func, button_texts, tip_text, title, window_position, window_size)
