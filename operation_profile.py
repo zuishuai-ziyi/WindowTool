@@ -2,7 +2,7 @@ import os, yaml, copy
 from enum import IntEnum, auto
 from typing import Any, Self, Dict, List, Type, NoReturn, Iterable, Callable, TypeVar
 from pathlib import Path
-from global_value import *
+import global_value
 
 class OperationType(IntEnum):
     '''操作类型'''

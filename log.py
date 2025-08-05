@@ -1,4 +1,4 @@
-import logging, enum, time
+import enum, time
 from typing import Any
 
 class LogLevel(enum.StrEnum):
@@ -53,7 +53,7 @@ class Log:
                     message=' '.join(str(n) for n in message),
                     time_h=time.strftime('%H'),
                     time_m=time.strftime('%M'),
-                    time_s=time.strftime('%S')
+                    time_s=time.strftime('%S'),
                 )
             # 美观输出多行文本
             if self.multi_line_change and '\n' in string:
@@ -67,7 +67,7 @@ class Log:
             with open(output_to_file, 'a+', encoding='utf-8') as f:
                 f.write(output_message[1])
         if output_to_console:
-            print(output_message[0])
+            print(output_message[0], end='')
 
     def __call__(self, *message: Any, output_to_console: bool | None = None, output_to_file: str | None = None):
         self._output(LogLevel.INFO, *message, output_to_console=output_to_console, output_to_file=output_to_file)

@@ -2,17 +2,16 @@ from transparent_overlay_window import TransparentOverlayWindow as TOW
 from PyQt5.QtWidgets import QApplication, QMessageBox, QWidget, QVBoxLayout, QGridLayout, QLabel, QPushButton, QFormLayout, QHBoxLayout, QDialog, QLineEdit, QCheckBox, QSizePolicy
 from PyQt5.QtGui import QCloseEvent, QIcon, QDoubleValidator, QFontMetrics
 from PyQt5.QtCore import QEvent, Qt, QTimer, pyqtSignal
-from api import get_top_window_under_mouse, get_window_pos_and_size, get_file_path, load_uia_lib, get_session_id
+from global_value import *
+from api import get_top_window_under_mouse, get_window_pos_and_size, get_file_path, load_UIAccess_lib, get_session_id
 from buttonbox import main as show_buttonbox
 from kill_process import kill_process
 from delete_file import delete_file
 from suspend_process import suspend_process, resume_process
 from other_window import input_box_window, MessageBox
-from operation_profile import Profile as ProfileClass, OperationType, OperationData, TypeIgnore
+from operation_profile import OperationType, OperationData
 from observe_window import ObserveWindow
 from call_run_dialog import ShowRunDialog
-from log import Log as log_class
-from global_value import *
 from typing import Any, Dict, Literal, List, Callable, NoReturn, Iterable
 from ctypes import wintypes
 import sys, win32gui, win32con, win32process, psutil, keyboard, ctypes, os, traceback, pywintypes, time, threading, webbrowser, re, argparse, functools, subprocess
@@ -1071,7 +1070,7 @@ def init() -> argparse.Namespace | None:
         log('尝试启用 UIAccess...')
         try:
             # 加载 UIAccess 库
-            load_res = load_uia_lib()
+            load_res = load_UIAccess_lib()
             if load_res is None:
                 MessageBox(parent=None, title="错误", top_info="尝试启用 UIAccess 时发生错误，详情请查阅日志", icon=QMessageBox.Critical)
                 return None
