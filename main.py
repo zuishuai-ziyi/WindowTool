@@ -15,7 +15,6 @@ from typing import Any, Dict, Literal, List, Callable, NoReturn, Iterable
 from ctypes import wintypes
 import sys, win32gui, win32con, win32process, psutil, keyboard, ctypes, os, traceback, pywintypes, time, threading, webbrowser, re, argparse, functools, subprocess
 
-# TODO 修复BUG：选择窗口时主窗口输入框可用
 
 class MainWindow(QWidget):
     '''主窗口'''
@@ -649,20 +648,20 @@ class MainWindow(QWidget):
             self.show()
             self.showNormal()
 
-    def slot_of_update_window(self):
+    def slot_of_update_window(self):  # L1
         '''更新窗口 / 信息'''
         # 重绘窗口，防止恶意软件的特效覆盖
         self.update()
         # 更新输入框
-        select_is_window = self.IsWindow(self.select_hwnd)
+        is_enable = self.IsWindow(self.select_hwnd) and not self.is_getting_info
 
-        self.sel_wind_info_widgets['window_title']['obj'][0].setEnabled(select_is_window)
+        self.sel_wind_info_widgets['window_title']['obj'][0].setEnabled(is_enable)
 
-        self.sel_wind_info_widgets['window_pos']['obj'][1].setEnabled(select_is_window)
-        self.sel_wind_info_widgets['window_pos']['obj'][3].setEnabled(select_is_window)
+        self.sel_wind_info_widgets['window_pos']['obj'][1].setEnabled(is_enable)
+        self.sel_wind_info_widgets['window_pos']['obj'][3].setEnabled(is_enable)
 
-        self.sel_wind_info_widgets['window_size']['obj'][1].setEnabled(select_is_window)
-        self.sel_wind_info_widgets['window_size']['obj'][3].setEnabled(select_is_window)
+        self.sel_wind_info_widgets['window_size']['obj'][1].setEnabled(is_enable)
+        self.sel_wind_info_widgets['window_size']['obj'][3].setEnabled(is_enable)
 
         # 更新选中窗口信息至文件
         if not self.is_getting_info:
@@ -703,7 +702,7 @@ class MainWindow(QWidget):
                 ) else 0,
                 win32con.SWP_SHOWWINDOW   # 标志，用于更改窗口显示状态
             )
-            win32gui.SetWindowText(self.select_hwnd, self.sel_wind_info_widgets['window_title']['obj'][0].text())  # type: ignore # 设置标题
+            win32gui.SetWindowText(self.select_hwnd, self.sel_wind_info_widgets['window_title']['obj'][0].text())  # 设置标题  # type: ignore
             # 设置后更新输入框，确保数据一致
             self.update_input_box()
     
@@ -716,9 +715,9 @@ class MainWindow(QWidget):
         self.sel_wind_info_widgets['window_title']['obj'][0].setEnabled(True)
 
         # 防止exe路径过长撑大窗口
-        metrics = QFontMetrics(self.sel_wind_info_widgets['window_exe']['obj'].font())
         max_show_len = 49
         filepath_text = exe_file_path if len(exe_file_path) <= max_show_len else exe_file_path[:max_show_len] + '...'
+
         self.sel_wind_info_widgets['window_exe']['obj'].setText(filepath_text)
 
         self.sel_wind_info_widgets['window_pos']['obj'][1].setText(str(left))
