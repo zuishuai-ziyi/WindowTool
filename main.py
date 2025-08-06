@@ -12,6 +12,7 @@ from operation_profile import OperationType, OperationData
 from observe_window import ObserveWindow
 from call_run_dialog import ShowRunDialog
 from typing import Any, Dict, Literal, List, Callable, NoReturn, Iterable, overload
+from multipledispatch import dispatch
 from ctypes import wintypes
 import sys, win32gui, win32con, win32process, psutil, keyboard, ctypes, os, traceback, pywintypes, time, threading, webbrowser, re, argparse, functools, subprocess
 
@@ -1091,7 +1092,7 @@ class TrayIcon(QSystemTrayIcon):
 
     def slot_of_exit(self) -> None:
         '''退出槽函数'''
-        exit_the_app(0)
+        exit_the_app(ExitCode.SUCCESS, reason='用户使用托盘图标退出')
 
 
 
@@ -1101,8 +1102,8 @@ def is_admin() -> bool:
     except:
         return False
     
-def run_again_as_admin(parent: QWidget | None = None, args = '') -> None | NoReturn:
-    '''以管理员身份重新运行当前程序'''
+def run_again_as_admin(parent: QWidget | None = None, args = '') -> bool:
+    '''以管理员身份重新运行当前程序 返回 是否成功'''
     # 请求UAC提权
     if getattr(sys, 'frozen', False):
         # 打包环境
@@ -1120,35 +1121,66 @@ def run_again_as_admin(parent: QWidget | None = None, args = '') -> None | NoRet
         log.error("提升权限失败!")
         if profile_obj['set_up']['show_error_box']:
             MessageBox(parent=parent, title="错误", top_info="提升权限失败!")
+        return True
     else:
-        exit_the_app()
+        return False
 
-
-def exit_the_app(code: int = 0, reason: str = '(无原因)', restart: bool = False, restart_args: str = '') -> NoReturn:
+@overload
+def exit_the_app(code: Literal[ExitCode.SUCCESS], reason: str = '(未提供原因)') -> NoReturn:
+    '''退出程序 | 正常退出'''
+    ...
+@overload
+def exit_the_app(code: Literal[ExitCode.UNKNOWN_ERROR], reason: str = '(未提供错误)') -> NoReturn:
+    '''退出程序 | 未知错误'''
+    ...
+@overload
+def exit_the_app(code: Literal[ExitCode.RESTART], reason: str = '(未提供原因)', restart_args: str = '') -> NoReturn:
+    '''退出程序 | 重启'''
+    ...
+@overload
+def exit_the_app(code: int, reason: str = '(未提供原因)') -> NoReturn:
+    '''退出程序 | 其他原因'''
+    ...
+def exit_the_app(code: ExitCode | int = ExitCode.SUCCESS, reason: str = '(无原因)', restart_args: str = '') -> NoReturn:
     '''退出程序'''
-    log(f'由于 {reason} 程序退出，退出代码为 {code}，{f'重启提供命令行参数: {restart_args}' if restart else '不进行重启操作'}')
+    # 打印日志
+    match code:
+        case ExitCode.SUCCESS:
+            log(f'程序正常退出 | 退出原因 {reason}')
+        case ExitCode.UNKNOWN_ERROR:
+            log.error(f'程序因意外错误退出 | 错误信息如下:\n{reason}')
+        case ExitCode.RESTART:
+            log(f'程序重启 | 重启原因 {reason} 重启时将提供以下参数 {restart_args}')
+            # 重启程序
+            if getattr(sys, 'frozen', False):
+                # 打包环境，运行可执行文件
+                executable = sys.executable
+                cmd = f"\"{executable}\" \"{restart_args}\""
+            else:
+                # 开发环境，使用解释器执行源代码
+                python = sys.executable
+                script = sys.argv[0]
+                cmd = f"{python} \"{script}\" {restart_args}"
+            log(f'即将运行以下命令进行重启: {cmd}')
+            subprocess.Popen(cmd)
+        case _:
+            log.warning(f'程序因其他原因退出 | 退出代码 {code} 原因 {reason}')
+
     # 释放资源
+    free_resource()
+
+    # 退出程序
+    exit_code = code == ExitCode.SUCCESS or code == ExitCode.RESTART
+    os._exit(exit_code)
+
+def free_resource() -> None:
+    '''释放资源'''
     try:
         if main_window.observe_obj and main_window.observe_obj.is_observing():
             # 停止观察
             main_window.observe_obj.stop()
     except Exception:
         pass
-    if restart:
-        log('程序重启')
-        # 重启程序
-        if getattr(sys, 'frozen', False):
-            # 打包环境，运行可执行文件
-            executable = sys.executable
-            cmd = f"\"{executable}\" \"{restart_args}\""
-        else:
-            # 开发环境，使用解释器执行源代码
-            python = sys.executable
-            script = sys.argv[0]
-            cmd = f"{python} \"{script}\" {restart_args}"
-        log(f"重启程序: {cmd}")
-        subprocess.Popen(cmd)
-    os._exit(code)
 
 def init() -> argparse.Namespace | None:
     '''初始化'''
@@ -1187,7 +1219,7 @@ def init() -> argparse.Namespace | None:
                         raise ctypes.WinError(ctypes.get_last_error())
                     else:
                         log(f'UIAccess 启动成功，PID: {pid.value}')
-                        exit_the_app()
+                        exit_the_app(ExitCode.SUCCESS, reason='UIAccess 已启动，停止当前进程')
                 else:
                     log('UIAccess 已启用')
             except Exception:
@@ -1227,7 +1259,7 @@ if __name__ == "__main__":
         if hasattr(sys, 'frozen'):
             # 若为打包结果，则提示
             MessageBox(title='错误', top_info='发生未知错误', info=f'{traceback.format_exc()}', icon=QMessageBox.Critical)
-            exit_the_app(1, reason=f'打包结果中发生未知错误: \n{traceback.format_exc()}')
+            exit_the_app(ExitCode.UNKNOWN_ERROR, reason=f'打包结果中发生未知错误: \n{traceback.format_exc()}')
         while 1:
             time.sleep(0.5)
 

@@ -8,7 +8,7 @@ class ExitCode(enum.IntEnum):
     SUCCESS = 0
     UNKNOWN_ERROR = 1
     RESTART = 2
-    OTHER = 3
+
 
 # 初始化日志文件对象
 os.makedirs(get_file_path('temp'), exist_ok=True)
