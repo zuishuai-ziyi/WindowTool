@@ -56,7 +56,7 @@
 
 #### v1.2.0
 
-新增 以 UIAccess 权限置顶 的功能，核心代码来自 [github.com/shc0743/RunUIAccess](shc0743 的项目 RunUIAccess)
+新增 以 UIAccess 权限置顶 的功能，核心代码来自 shc0743 的项目 https://github.com/shc0743/RunUIAccess
 
 使界面尺寸可被修改
 
