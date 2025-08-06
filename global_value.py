@@ -1,7 +1,14 @@
-import os, traceback
+import os, traceback, enum
 from log import Log as LogClass
 from api import get_file_path
 from operation_profile import Profile as ProfileClass, TypeIgnore
+
+class ExitCode(enum.IntEnum):
+    '''退出代码'''
+    SUCCESS = 0
+    UNKNOWN_ERROR = 1
+    RESTART = 2
+    OTHER = 3
 
 # 初始化日志文件对象
 os.makedirs(get_file_path('temp'), exist_ok=True)

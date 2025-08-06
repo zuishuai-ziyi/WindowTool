@@ -1,5 +1,5 @@
 from transparent_overlay_window import TransparentOverlayWindow as TOW
-from PyQt5.QtWidgets import QApplication, QMessageBox, QWidget, QVBoxLayout, QGridLayout, QLabel, QPushButton, QFormLayout, QHBoxLayout, QDialog, QLineEdit, QCheckBox, QSizePolicy
+from PyQt5.QtWidgets import QApplication, QMessageBox, QWidget, QVBoxLayout, QGridLayout, QLabel, QPushButton, QFormLayout, QHBoxLayout, QDialog, QLineEdit, QCheckBox, QSizePolicy, QSystemTrayIcon, QMenu
 from PyQt5.QtGui import QCloseEvent, QIcon, QDoubleValidator, QFontMetrics
 from PyQt5.QtCore import QEvent, Qt, QTimer, pyqtSignal
 from global_value import *
@@ -11,7 +11,7 @@ from other_window import input_box_window, MessageBox
 from operation_profile import OperationType, OperationData
 from observe_window import ObserveWindow
 from call_run_dialog import ShowRunDialog
-from typing import Any, Dict, Literal, List, Callable, NoReturn, Iterable
+from typing import Any, Dict, Literal, List, Callable, NoReturn, Iterable, overload
 from ctypes import wintypes
 import sys, win32gui, win32con, win32process, psutil, keyboard, ctypes, os, traceback, pywintypes, time, threading, webbrowser, re, argparse, functools, subprocess
 
@@ -822,10 +822,6 @@ class MainWindow(QWidget):
         self.TOW_obj = TOW(left, top, width, height, callback=callback)
         self.TOW_obj.show()
 
-
-    def closeEvent(self, event) -> None:
-        self.stop_get_info()
-
     def stop_get_info(self) -> None:
         '''停止获取窗口信息'''
         self.update_sele_wind_timer.stop()
@@ -846,7 +842,15 @@ class MainWindow(QWidget):
         self.TOW_obj = None
         # 上一个被覆盖窗口是否置顶
         self.last_window_is_top = False
-
+    
+    def closeEvent(self, event: QCloseEvent) -> None:
+        '''关闭事件'''
+        # 停止获取窗口信息
+        self.stop_get_info()
+        # 隐藏窗口
+        self.hide()
+        # 忽略事件默认行为
+        event.ignore()
 
 
 
@@ -1016,7 +1020,6 @@ class SetUpWindow(QDialog):
 
 
 
-
 class AboutWindow(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -1058,6 +1061,40 @@ class AboutWindow(QDialog):
         self.setLayout(self.main_layout)
 
 
+
+class TrayIcon(QSystemTrayIcon):
+    '''托盘图标'''
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        # 设置基本属性
+        self.setIcon(QIcon(get_file_path('data\\icon\\window.png')))
+        self.setToolTip('WindowTool 窗口管理工具')
+        # 创建菜单
+        self.menu = QMenu(parent)
+        # 添加菜单项
+        self.menu.addAction('主界面', self.slof_of_main_window)
+        self.menu.addAction('退出', self.slot_of_exit)
+        # 设置菜单
+        self.setContextMenu(self.menu)
+        # 设置点击图标显示菜单
+        self.activated.connect(self.show_menu)
+
+    def show_menu(self, reason: int) -> None:
+        '''点击图标显示菜单'''
+        if reason == QSystemTrayIcon.Trigger: # type: ignore
+            # 左键单击
+            main_window.showNormal()
+
+    def slof_of_main_window(self) -> None:
+        '''主界面槽函数'''
+        main_window.showNormal()
+
+    def slot_of_exit(self) -> None:
+        '''退出槽函数'''
+        exit_the_app(0)
+
+
+
 def is_admin() -> bool:
     try:
         return ctypes.windll.shell32.IsUserAnAdmin() != 0
@@ -1086,8 +1123,10 @@ def run_again_as_admin(parent: QWidget | None = None, args = '') -> None | NoRet
     else:
         exit_the_app()
 
-def exit_the_app(code: int = 0, restart: bool = False, restart_args: str = '') -> NoReturn:
+
+def exit_the_app(code: int = 0, reason: str = '(无原因)', restart: bool = False, restart_args: str = '') -> NoReturn:
     '''退出程序'''
+    log(f'由于 {reason} 程序退出，退出代码为 {code}，{f'重启提供命令行参数: {restart_args}' if restart else '不进行重启操作'}')
     # 释放资源
     try:
         if main_window.observe_obj and main_window.observe_obj.is_observing():
@@ -1096,6 +1135,7 @@ def exit_the_app(code: int = 0, restart: bool = False, restart_args: str = '') -
     except Exception:
         pass
     if restart:
+        log('程序重启')
         # 重启程序
         if getattr(sys, 'frozen', False):
             # 打包环境，运行可执行文件
@@ -1109,7 +1149,6 @@ def exit_the_app(code: int = 0, restart: bool = False, restart_args: str = '') -
         log(f"重启程序: {cmd}")
         subprocess.Popen(cmd)
     os._exit(code)
-
 
 def init() -> argparse.Namespace | None:
     '''初始化'''
@@ -1168,7 +1207,10 @@ if __name__ == "__main__":
         init()
         # 创建应用程序实例
         app = QApplication(sys.argv)
+        # 创建主窗口
         main_window = MainWindow()
+        # 创建托盘图标
+        tray_icon = TrayIcon()
         # 根据命令行参数修改选中窗口
         if command_line_args.hwnd and main_window.IsWindow(select_hwnd := int(command_line_args.hwnd)): # type: ignore
             main_window.select_hwnd = select_hwnd
@@ -1176,6 +1218,8 @@ if __name__ == "__main__":
             main_window.chose_window()
         # 显示窗口
         main_window.show()
+        # 显示托盘图标
+        tray_icon.show()
         # 运行应用程序事件循环
         exit_the_app(app.exec())
     except:
@@ -1183,7 +1227,7 @@ if __name__ == "__main__":
         if hasattr(sys, 'frozen'):
             # 若为打包结果，则提示
             MessageBox(title='错误', top_info='发生未知错误', info=f'{traceback.format_exc()}', icon=QMessageBox.Critical)
-            exit_the_app()
+            exit_the_app(1, reason=f'打包结果中发生未知错误: \n{traceback.format_exc()}')
         while 1:
             time.sleep(0.5)
 
