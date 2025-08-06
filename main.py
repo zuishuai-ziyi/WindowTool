@@ -1065,7 +1065,7 @@ def is_admin() -> bool:
     except:
         return False
     
-def run_again_as_admin(parent: QWidget | None = None, args = '') -> None:
+def run_again_as_admin(parent: QWidget | None = None, args = '') -> None | NoReturn:
     '''以管理员身份重新运行当前程序'''
     # 请求UAC提权
     if getattr(sys, 'frozen', False):
@@ -1122,37 +1122,45 @@ def init() -> argparse.Namespace | None:
     # 验证命令行参数是否有效
     if not(isinstance(command_line_args.hwnd, str) and command_line_args.hwnd.isnumeric()):
         command_line_args.hwnd = None
-    if is_admin() and profile_obj['set_up']['on_top_with_UIAccess']:
-        log('尝试启用 UIAccess...')
-        try:
-            # 加载 UIAccess 库
-            load_res = load_UIAccess_lib()
-            if load_res is None:
-                MessageBox(parent=None, title="错误", top_info="尝试启用 UIAccess 时发生错误，详情请查阅日志", icon=QMessageBox.Critical)
-                return None
-            _, IsUIA, StartUIA = load_res
-            if not IsUIA():
-                if getattr(sys, 'frozen', False):
-                    # 打包环境
-                    exe_path = sys.executable
-                    params = 'app'
+    if profile_obj['set_up']['on_top_with_UIAccess']:
+        if is_admin():
+            log('已以管理员身份运行，尝试启用 UIAccess...')
+            try:
+                # 加载 UIAccess 库
+                load_res = load_UIAccess_lib()
+                if load_res is None:
+                    MessageBox(parent=None, title="错误", top_info="尝试启用 UIAccess 时发生错误，详情请查阅日志", icon=QMessageBox.Critical)
+                    return None
+                _, IsUIA, StartUIA = load_res
+                if not IsUIA():
+                    if getattr(sys, 'frozen', False):
+                        # 打包环境
+                        exe_path = sys.executable
+                        params = 'app'
+                    else:
+                        # 非打包环境
+                        exe_path = sys.executable
+                        script_path = os.path.abspath(__file__)
+                        params = f'pythonw "{script_path}"'
+                    if command_line_args.hwnd:
+                        params += f' --hwnd={command_line_args.hwnd}'
+                    pid = wintypes.DWORD(0)
+                    if not StartUIA(exe_path, params, 0, ctypes.byref(pid), get_session_id()):
+                        raise ctypes.WinError(ctypes.get_last_error())
+                    else:
+                        log(f'UIAccess 启动成功，PID: {pid.value}')
+                        exit_the_app()
                 else:
-                    # 非打包环境
-                    exe_path = sys.executable
-                    script_path = os.path.abspath(__file__)
-                    params = f'pythonw "{script_path}"'
-                if command_line_args.hwnd:
-                    params += f' --hwnd={command_line_args.hwnd}'
-                pid = wintypes.DWORD(0)
-                if not StartUIA(exe_path, params, 0, ctypes.byref(pid), get_session_id()):
-                    raise ctypes.WinError(ctypes.get_last_error())
-                else:
-                    log(f'UIAccess 启动成功，PID: {pid.value}')
-                    exit_the_app()
-            else:
-                log('UIAccess 已启用')
-        except Exception:
-            log.warning(f'UIAccess 加载失败:\n{traceback.format_exc()}')
+                    log('UIAccess 已启用')
+            except Exception:
+                log.warning(f'UIAccess 加载失败:\n{traceback.format_exc()}')
+        else:
+            log('无管理员权限，无法启用 UIAccess')
+            if MessageBox(parent=None, title="提示", top_info="无法启用 UIAccess：权限不足", info='是否提升权限并启用？', buttons=('提权并启用', '不提权并继续')) == '提权并启用':
+                log("尝试提权并重启")
+                run_again_as_admin()
+            log('不提权并继续')
+
 
 
 if __name__ == "__main__":
@@ -1174,8 +1182,8 @@ if __name__ == "__main__":
     except:
         log.critical(f"发生错误:\n{traceback.format_exc()}")
         if hasattr(sys, 'frozen'):
-            MessageBox(title='错误', top_info='发生未知错误', info=f'{traceback.format_exc()}', icon=QMessageBox.Critical)
             # 若为打包结果，则提示
+            MessageBox(title='错误', top_info='发生未知错误', info=f'{traceback.format_exc()}', icon=QMessageBox.Critical)
             exit_the_app()
         while 1:
             time.sleep(0.5)
