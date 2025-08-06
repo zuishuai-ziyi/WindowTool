@@ -50,10 +50,9 @@ def get_window_pos_and_size(hwnd) -> tuple[int, int, int, int, int, int]:
 
 def get_file_path(file_path: str):
     """获取资源文件实际绝对路径"""
+    file_abs_path = Path(sys._MEIPASS) if hasattr(sys, '_MEIPASS') else Path(__file__).parent # type: ignore
     return str(
-            Path(
-                sys._MEIPASS if hasattr(sys, '_MEIPASS') else __file__  # type: ignore
-            ).parent.resolve() / Path(file_path)
+        file_abs_path.resolve() / Path(file_path)
     )
 
 def load_UIAccess_lib():

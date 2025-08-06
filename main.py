@@ -536,6 +536,7 @@ class MainWindow(QWidget):
 
     def chose_window(self) -> None:
         '''已选择窗口'''
+        log.debug('已选择窗口')
         # 判断句柄是否有效
         if not self.IsWindow(self.select_hwnd):
             log(f'当前句柄“{self.select_hwnd}”无效')
@@ -549,6 +550,7 @@ class MainWindow(QWidget):
         # 正常显示
         self.showNormal()
         # 判断是否需要提权
+        log.debug(f"尝试访问进程 PID: {self.select_pid}")
         phandle = ctypes.windll.kernel32.OpenProcess(win32con.PROCESS_ALL_ACCESS, False, self.select_pid)
         if not phandle:
             # 无法访问目标进程
@@ -557,13 +559,12 @@ class MainWindow(QWidget):
                 run_again_as_admin(self, f'--hwnd={self.select_hwnd}')
         else:
             ctypes.windll.kernel32.CloseHandle(phandle) # 关闭句柄
+        log.debug(f'访问结束')
         # 应用记录的窗口信息
-        log.debug(f'边框 {profile_obj["select_window_info"][0]["has_frame"]}')
         self.use_window_info(self.select_hwnd) # type: ignore
-        log.debug(f'边框 {profile_obj["select_window_info"][0]["has_frame"]}')
         # 记录窗口信息
         self.record_window_info(self.select_hwnd) # type: ignore
-        log.debug(f'边框 {profile_obj["select_window_info"][0]["has_frame"]}')
+        log.debug('窗口信息已记录')
         # 更新数据
         self.select_obj = psutil.Process(self.select_pid)
         self.select_process_info['suspend'] = False
@@ -580,6 +581,7 @@ class MainWindow(QWidget):
             wait_time=0.1
         )
         self.observe_obj.start()
+        log.debug('已启动窗口监测器')
         # 更改显示信息
         self.update_input_box()
 
