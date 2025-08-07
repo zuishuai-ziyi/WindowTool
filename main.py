@@ -19,6 +19,8 @@ import sys, win32gui, win32con, win32process, psutil, keyboard, ctypes, os, trac
 
 class MainWindow(QWidget):
     '''主窗口'''
+    # 热键触发信号，防止 热键触发时的回调函数 中的计时器在另一个线程中开启
+    hotkey_triggered = pyqtSignal()
     def __init__(self) -> None:
         super().__init__()
 
@@ -74,8 +76,12 @@ class MainWindow(QWidget):
         self.main_UI()
 
         # 启动热键监听
+        self.hotkey_triggered.connect(lambda: self.slot_of_start_get_window_button() and None)
         if profile_obj['set_up']['allow_hotkey_start_choose']:
-            keyboard.add_hotkey
+            keyboard.add_hotkey(
+                '+'.join(profile_obj['set_up']['start_choose_window_hotkey']),
+                lambda: self.hotkey_triggered.emit() if not self.is_getting_info else None
+            )
 
     def changeEvent(self, event: QEvent | None) -> None:
         if profile_obj.get('set_up').get('allow_minimize', True) == False:
@@ -666,7 +672,7 @@ class MainWindow(QWidget):
             self.show()
             self.showNormal()
 
-    def slot_of_update_window(self):  # L1
+    def slot_of_update_window(self):
         '''更新窗口 / 信息'''
         # 重绘窗口，防止恶意软件的特效覆盖
         self.update()
@@ -753,6 +759,7 @@ class MainWindow(QWidget):
 
     def slot_of_start_get_window_button(self):
         '''开始获取窗口信息'''
+        log.debug('开始获取窗口信息')
         if self.is_getting_info:
             self.stop_get_info()
             self.init_overlay_attribute()

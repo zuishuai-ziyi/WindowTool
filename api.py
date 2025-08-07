@@ -1,6 +1,7 @@
 import win32gui, win32api, win32process, win32con, os, sys, ctypes, traceback
 from ctypes import wintypes
 from pathlib import Path
+from typing import Callable, Iterable, Any
 import global_value
 
 def get_top_window_under_mouse(exclude_hwnds: list[int] | None = None) -> tuple[int, int]:
@@ -96,6 +97,32 @@ def get_session_id() -> int:
 
     return session_id.value
 
-# TODO 增加深度遍历功能 及 按路径访问元素功能 -> 使用 now_path 访问元素
-# def func(data, callback, now_path=[]):  now_path -> 如果当前在 data['a']['b'][0] 则 now_path=['a', 'b', 0]
-#     ...
+def deep_search(data: Iterable, callback: Callable[[list[str | int]], Any], now_path: list[str | int] | None = None, always_call_callback: bool = False):
+    """深度遍历数据结构，执行回调函数 always_call_callback -> 对于可迭代对象，仍然调用回调函数"""
+    if now_path is None:
+        # 初始化路径
+        now_path = []
+    else:
+        # 复制路径
+        now_path = now_path.copy()
+    # 边界判断
+    if (not isinstance(data, Iterable)) or isinstance(data, str):
+        callback(now_path)
+        return
+    # 检测是否调用回调函数
+    if always_call_callback:
+        callback(now_path)
+    # 初始化索引
+    now_path.append(-1)
+    # 遍历字典
+    if isinstance(data, dict):
+        for k, v in data.items():
+            now_path[-1] = k  # 更新当前路径
+            deep_search(v, callback, now_path, always_call_callback)
+        return
+    # 遍历其他可迭代对象
+    for i, item in enumerate(data):
+        now_path[-1] = i  # 更新当前路径
+        deep_search(item, callback, now_path, always_call_callback)
+    return
+    
