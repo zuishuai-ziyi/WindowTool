@@ -73,6 +73,10 @@ class MainWindow(QWidget):
 
         self.main_UI()
 
+        # 启动热键监听
+        if profile_obj['set_up']['allow_hotkey_start_choose']:
+            keyboard.add_hotkey
+
     def changeEvent(self, event: QEvent | None) -> None:
         if profile_obj.get('set_up').get('allow_minimize', True) == False:
             if event and event.type() == QEvent.WindowStateChange: # type: ignore
@@ -882,7 +886,7 @@ class SetUpWindow(QDialog):
         # 初始化窗口属性
         self.setWindowTitle("设置")
         self.setWindowIcon(QIcon(get_file_path("data\\icon\\set_up.png")))
-        self.setFixedSize(400, 300)
+        self.setFixedSize(500, 400)
         self.setWindowFlag(Qt.Dialog) # type: ignore
 
         # 初始化属性
@@ -935,13 +939,51 @@ class SetUpWindow(QDialog):
         self.keep_work_input_box.textChanged.connect(self.slot_of_keep_work_input_box)
         self.set_up_items_layout.addRow(QLabel("强制前台间隔时间(s)"), self.keep_work_input_box)
 
+        # 添加 开始选择窗口快捷键 按钮
+        self.set_start_choose_hotkey_button = QPushButton()
+        self.set_start_choose_hotkey_button.setText('+'.join(self.set_up_data["start_choose_window_hotkey"]))
+        self.set_start_choose_hotkey_button.setToolTip('点击此处设置快捷键')
+        self.set_start_choose_hotkey_button.setStyleSheet('''
+            /* 基础样式 */
+            QPushButton {
+                background-color: #2196F3;  /* 蓝色背景 */
+                color: white;               /* 白色文字 */
+                border-radius: 5px;         /* 圆角半径 */
+                padding: 5px 30px;          /* 增大内边距 */
+                min-height: 5px;            /* 最小高度 */
+                font-size: 16px;
+                font-weight: bold;
+                border: 2px solid #0D47A1;  /* 深蓝色边框 */
+            }
+            
+            /* 鼠标悬停效果 */
+            QPushButton:hover {
+                background-color: #42A5F5;
+                border: 2px solid #1976D2;
+            }
+            
+            /* 按下状态 */
+            QPushButton:pressed {
+                background-color: #0b7dda;
+            }
+            
+            /* 选中状态（点击后保持） */
+            QPushButton:checked {
+                color: yellow;            /* 文字变黄色 */
+            }
+        ''')
+        self.set_start_choose_hotkey_button.setCheckable(True)
+        self.set_start_choose_hotkey_button.clicked.connect(self.slot_of_set_hotkey_to_start_choose)
+        self.set_up_items_layout.addRow(QLabel("开始选择窗口快捷键"), self.set_start_choose_hotkey_button)
+
         # 添加多选框
         self.check_boxes = {
-            "on_top_with_UIAccess": ('是否使用 UIAccess 超级置顶', QCheckBox(), {'restart': True}),
-            "show_info_box":        ('是否显示信息对话框', QCheckBox()),
-            "show_warning_box":     ('是否显示警告对话框', QCheckBox()),
-            "show_error_box":       ('是否显示错误对话框', QCheckBox()),
-            'show_tray_icon':       ('是否显示托盘图标', QCheckBox()),
+            'allow_hotkey_start_choose':    ('是否允许使用快捷键开始选择窗口', QCheckBox()),
+            "on_top_with_UIAccess":         ('是否使用 UIAccess 超级置顶', QCheckBox(), {'restart': True}),
+            "show_info_box":                ('是否显示信息对话框', QCheckBox()),
+            "show_warning_box":             ('是否显示警告对话框', QCheckBox()),
+            "show_error_box":               ('是否显示错误对话框', QCheckBox()),
+            'show_tray_icon':               ('是否显示托盘图标', QCheckBox()),
         }
         self.setting_check_boxes = False
         '''正在设置多选框选中状态'''
@@ -974,6 +1016,33 @@ class SetUpWindow(QDialog):
             self.set_up_data['keep_work_time'] = float(self.keep_work_input_box.text())
         except ValueError:
             pass
+    
+    def slot_of_set_hotkey_to_start_choose(self):
+        '''开始设置热键'''
+        def listener_func(event: keyboard.KeyboardEvent):
+            '''监听按键事件'''
+            if event.event_type == 'down':
+                # 按下按键，记录按键
+                if event.name not in new_hotkey:
+                    new_hotkey.append(event.name)
+                    self.set_start_choose_hotkey_button.setText(f'> {'+'.join(new_hotkey)} <')
+            elif event.event_type == 'up' and new_hotkey:
+                # 抬起按键，结束记录
+                self.set_up_data['start_choose_window_hotkey'] = new_hotkey
+                self.set_start_choose_hotkey_button.setText('+'.join(new_hotkey))
+                self.set_start_choose_hotkey_button.setEnabled(True)
+                self.set_start_choose_hotkey_button.setChecked(False)
+                keyboard.unhook(listener_func)
+            return False  # 返回 False 以阻止事件传播
+        # 设置按钮状态
+        # 设置焦点
+        self.set_start_choose_hotkey_button.setFocus(Qt.FocusReason.MouseFocusReason)
+        self.set_start_choose_hotkey_button.setEnabled(False)
+        self.set_start_choose_hotkey_button.setText(f'> 请输入新快捷键 <')
+        new_hotkey = []
+        # 监听按键
+        keyboard.hook(listener_func)
+
     
     def slot_of_show_message_boxes(self, k: str) -> None:
         '''多选框槽函数'''
@@ -1162,27 +1231,28 @@ def exit_the_app(code: int, reason: str = '(未提供原因)') -> NoReturn:
 def exit_the_app(code: ExitCode | int = ExitCode.SUCCESS, reason: str = '(无原因)', restart_args: str = '') -> NoReturn:
     '''退出程序'''
     # 打印日志
-    match code:
-        case ExitCode.SUCCESS:
-            log(f'程序正常退出 | 退出原因 {reason}')
-        case ExitCode.UNKNOWN_ERROR:
-            log.error(f'程序因意外错误退出 | 错误信息如下:\n{reason}')
-        case ExitCode.RESTART:
-            log(f'程序重启 | 重启原因 {reason} 重启时将提供以下参数 {restart_args}')
-            # 重启程序
-            if getattr(sys, 'frozen', False):
-                # 打包环境，运行可执行文件
-                executable = sys.executable
-                cmd = f"\"{executable}\" \"{restart_args}\""
-            else:
-                # 开发环境，使用解释器执行源代码
-                python = sys.executable
-                script = sys.argv[0]
-                cmd = f"{python} \"{script}\" {restart_args}"
-            log(f'即将运行以下命令进行重启: {cmd}')
-            subprocess.Popen(cmd)
-        case _:
-            log.warning(f'程序因其他原因退出 | 退出代码 {code} 原因 {reason}')
+    if isinstance(code, ExitCode):
+        match code:
+            case ExitCode.SUCCESS:
+                log(f'程序正常退出 | 退出原因 {reason}')
+            case ExitCode.UNKNOWN_ERROR:
+                log.error(f'程序因意外错误退出 | 错误信息如下:\n{reason}')
+            case ExitCode.RESTART:
+                log(f'程序重启 | 重启原因 {reason} 重启时将提供以下参数 {restart_args}')
+                # 重启程序
+                if getattr(sys, 'frozen', False):
+                    # 打包环境，运行可执行文件
+                    executable = sys.executable
+                    cmd = f"\"{executable}\" \"{restart_args}\""
+                else:
+                    # 开发环境，使用解释器执行源代码
+                    python = sys.executable
+                    script = sys.argv[0]
+                    cmd = f"{python} \"{script}\" {restart_args}"
+                log(f'即将运行以下命令进行重启: {cmd}')
+                subprocess.Popen(cmd)
+    else:
+        log.warning(f'程序因其他原因退出 | 退出代码 {code} 原因 {reason}')
 
     # 释放资源
     free_resource()
@@ -1279,8 +1349,16 @@ if __name__ == "__main__":
             # 若为打包结果，则提示
             MessageBox(title='错误', top_info='发生未知错误', info=f'{traceback.format_exc()}', icon=QMessageBox.Critical)
             exit_the_app(ExitCode.UNKNOWN_ERROR, reason=f'打包结果中发生未知错误: \n{traceback.format_exc()}')
-        while 1:
-            time.sleep(0.5)
+        try:
+            while 1:
+                time.sleep(0.5)
+        except KeyboardInterrupt:
+            log('程序终止')
+            try:
+                exit_the_app(1, reason='发生未知错误时，用户使用 ctrl+c 终止程序')
+            except Exception:
+                log('无法调用 exit_the_app 函数进行终止')
+                exit(1)
 
 # 打包命令 建议使用 pack.bat 打包
 # pyinstaller main.py --noconsole --add-data "data:data" -i "D:\_ziyi_home_\ziyi_home\文件\code\python\wowo\开发中\windows\data\icon\window.png"

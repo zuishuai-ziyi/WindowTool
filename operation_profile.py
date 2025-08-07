@@ -116,20 +116,8 @@ class Profile:
     
     def _check_dict(self, d1: Dict[Any, Any], d2: Dict[Any, Any], using_default: bool) -> bool:
         # print('dict check ', d1, '\n', d2)
-        # 排除忽略值
-        n_d1, n_d2 = copy.deepcopy(d1), copy.deepcopy(d2)
-        for k, v in d2.items():
-            if isinstance(v, TypeIgnore):
-                # 忽略该项
-                default = object()
-                if d1.get(k, default) == default:
-                    # d1 无该键，跳过
-                    continue
-                del n_d1[k]
-                del n_d2[k]
-        d1, d2 = n_d1, n_d2
         # 检查键是否相同
-        if d1.keys() != d2.keys():
+        if not any(isinstance(n, TypeIgnore) for n in d2) and d1.keys() != d2.keys():
             return False
         for k in d2:
             v1, v2 = d1[k], d2[k]
@@ -146,6 +134,9 @@ class Profile:
                 # d2包含可迭代对象，递归检查
                 if not self._check_iterable(v1, v2, using_default):
                     return False
+            elif isinstance(v2, TypeIgnore):
+                # 忽略该项
+                continue
             else:
                 # d2包含无效值
                 return False
