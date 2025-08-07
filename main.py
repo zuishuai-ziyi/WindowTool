@@ -436,6 +436,8 @@ class MainWindow(QWidget):
         # 启动更新属性状态计时器
         self.stop_and_start_timer('on_top', 'on_top_time')
         self.stop_and_start_timer('keep_work', 'keep_work_time')
+        # 绑定配置文件回调函数
+        profile_obj.register_callback(self.slot_of_profile_callback)
 
     def set_window_border(self, hwnd, borderless: bool | None = None) -> None:
         '''设置窗口为无边框或恢复边框，设置 borderless 为 None 以切换状态'''
@@ -587,17 +589,28 @@ class MainWindow(QWidget):
 
     def slot_of_profile_callback(self, op_type: OperationType, data: OperationData):
         '''配置文件回调函数'''
-        if op_type == OperationType.SET_ITEM:
+        if op_type == OperationType.SET_ITEM and data['key'] == 'set_up':
             # 设置键值对，检查是否更新计时器
-            if data['key'] == 'set_up' and isinstance(data['new_value'].get('on_top_time', None), (float, int)):
+            if isinstance(data['new_value'].get('on_top_time', None), (float, int)):
                 self.stop_and_start_timer('on_top', 'on_top_time')
-            if data['key'] == 'set_up' and isinstance(data['new_value'].get('keep_work_time', None), (float, int)):
+            if isinstance(data['new_value'].get('keep_work_time', None), (float, int)):
                 self.stop_and_start_timer('keep_work', 'keep_work_time')
-        elif op_type == OperationType.SET_ALL:
+            self.change_tray_icon_visible(data)
+        elif op_type == OperationType.SET_ALL and data['key'] == 'set_up':
             self.stop_and_start_timer('on_top', 'on_top_time')
             self.stop_and_start_timer('keep_work', 'keep_work_time')
+            self.change_tray_icon_visible(data)
         else:
             ...
+    
+    def change_tray_icon_visible(self, data: OperationData) -> None:
+        '''检查并切换托盘图标可见状态'''
+        if isinstance(data['new_value'].get('show_tray_icon', None), bool):
+            # 切换可见状态
+            if data['new_value']['show_tray_icon']:
+                tray_icon.show()
+            else:
+                tray_icon.hide()
 
     def stop_and_start_timer(self, timer_name: str, profile_key: str, root_key: str = 'set_up', default_value: int = -1) -> None:
         '''停止并按配置文件中的时间重新启动计时器'''
@@ -848,10 +861,14 @@ class MainWindow(QWidget):
         '''关闭事件'''
         # 停止获取窗口信息
         self.stop_get_info()
-        # 隐藏窗口
-        self.hide()
-        # 忽略事件默认行为
-        event.ignore()
+        # 隐藏/关闭窗口
+        if profile_obj.get('set_up', {'show_tray_icon': True}).get('show_tray_icon', True):
+            # 显示托盘图标时隐藏窗口
+            log('主窗口隐藏')
+            event.ignore() # 忽略关闭事件
+            self.hide()
+        else:
+            log('主窗口关闭')
 
 
 
@@ -924,6 +941,7 @@ class SetUpWindow(QDialog):
             "show_info_box":        ('是否显示信息对话框', QCheckBox()),
             "show_warning_box":     ('是否显示警告对话框', QCheckBox()),
             "show_error_box":       ('是否显示错误对话框', QCheckBox()),
+            'show_tray_icon':       ('是否显示托盘图标', QCheckBox()),
         }
         self.setting_check_boxes = False
         '''正在设置多选框选中状态'''
@@ -1251,7 +1269,8 @@ if __name__ == "__main__":
         # 显示窗口
         main_window.show()
         # 显示托盘图标
-        tray_icon.show()
+        if profile_obj['set_up']['show_tray_icon']:
+            tray_icon.show()
         # 运行应用程序事件循环
         exit_the_app(app.exec())
     except:

@@ -25,6 +25,7 @@ _default_profile = \
         'show_info_box': True,              # 是否显示信息文本框
         'show_warning_box': True,           # 是否显示警告文本框
         'show_error_box': True,             # 是否显示错误文本框
+        'show_tray_icon': True              # 是否显示托盘图标
     },
     'select_window_info': TypeIgnore([])
 }
