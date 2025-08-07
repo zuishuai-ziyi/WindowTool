@@ -95,3 +95,7 @@ def get_session_id() -> int:
         raise ctypes.WinError(ctypes.get_last_error())
 
     return session_id.value
+
+# TODO 增加深度遍历功能 及 按路径访问元素功能 -> 使用 now_path 访问元素
+# def func(data, callback, now_path=[]):  now_path -> 如果当前在 data['a']['b'][0] 则 now_path=['a', 'b', 0]
+#     ...
