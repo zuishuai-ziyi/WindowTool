@@ -868,7 +868,7 @@ class MainWindow(QWidget):
             event.ignore() # 忽略关闭事件
             self.hide()
         else:
-            log('主窗口关闭')
+            log('主窗口被关闭')
 
 
 
@@ -1272,7 +1272,7 @@ if __name__ == "__main__":
         if profile_obj['set_up']['show_tray_icon']:
             tray_icon.show()
         # 运行应用程序事件循环
-        exit_the_app(app.exec())
+        exit_the_app(app.exec(), reason='应用程序所有窗口均被关闭')
     except:
         log.critical(f"发生错误:\n{traceback.format_exc()}")
         if hasattr(sys, 'frozen'):
