@@ -110,7 +110,7 @@ def deep_search(data: Iterable, callback: Callable[[list[str | int]], Any], now_
         callback(now_path)
         return
     # 检测是否调用回调函数
-    if always_call_callback:
+    if always_call_callback and now_path:
         callback(now_path)
     # 初始化索引
     now_path.append(-1)
@@ -125,4 +125,29 @@ def deep_search(data: Iterable, callback: Callable[[list[str | int]], Any], now_
         now_path[-1] = i  # 更新当前路径
         deep_search(item, callback, now_path, always_call_callback)
     return
-    
+
+def get_value_from_path[DefaultType: Any](data: dict, path: list[str | int], default: DefaultType = None) -> Any | DefaultType:
+    """根据路径获取字典中的值"""
+    cdata = data.copy()
+    for key in path:
+        if isinstance(cdata, dict):
+            if key in cdata:
+                cdata = cdata[key]
+            else:
+                return default
+        elif isinstance(cdata, list):
+            if isinstance(key, int) and 0 <= key < len(cdata):
+                cdata = cdata[key]
+            else:
+                return default
+        else:
+            break
+    return cdata
+
+if __name__ == "__main__":
+    # 测试深度遍历
+    test_data = {
+        'a': [1, 2, {'b': 3, 'c': [4, 5]}],
+        'd': {'e': 6, 'f': [7, 8]}
+    }
+    deep_search(test_data, lambda path: print(path, get_value_from_path(test_data, path)), always_call_callback=True)

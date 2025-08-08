@@ -2,8 +2,7 @@ import os, yaml, copy
 from enum import IntEnum, auto
 from typing import Any, Self, Dict, List, Type, NoReturn, Iterable, Callable, TypeVar
 from pathlib import Path
-import global_value
-
+# TODO 修复类型检查
 class OperationType(IntEnum):
     '''操作类型'''
     SET_ITEM = auto()
@@ -144,24 +143,31 @@ class Profile:
 
     def create(self, data: Dict[str, Any], *, using_callback: bool = True):
         '''创建配置文件'''
+        import api
         if self.callback and using_callback:
             self.callback(OperationType.CREATE, {"path": self.file, "new_value": data})
         # 创建文件的祖先目录
         os.makedirs(self.file.parent, exist_ok=True)
         # 检查字典
-        _data = dict()
-        for k, v in data.items():
-            if isinstance(v, TypeIgnore):
-                # 使用该类的属性作为值
-                if v.data == TypeIgnore.default:
-                    # 未设置默认值，跳过
-                    continue
-                _data[k] = v.data
-                continue
-            _data[k] = v
+        new_data = copy.deepcopy(data)
+        def callback(path: list[str | int]):
+            '''回调函数，检查字典，设置 TypeIgnore 为 TypeIgnore.data'''
+            nonlocal new_data, data
+            value = api.get_value_from_path(data, path)
+            if isinstance(value, TypeIgnore):
+                # 如果是列表，设置为 TypeIgnore.data
+                print(f'list {path} {new_data}')
+                if path[:-1]:
+                    # 不是根目录
+                    api.get_value_from_path(new_data, path[:-1])[path[-1]] = value.data # type: ignore
+                else:
+                    # 是根目录
+                    new_data[path[0]] = value.data # type: ignore
+        print(data)
+        api.deep_search(data, callback)
         # 创建文件
         with open(self.file, 'a+', encoding='utf-8') as f:
-            yaml.dump(_data, f)
+            yaml.dump(new_data, f)
         return
 
     def file_exists(self) -> bool:
@@ -191,7 +197,7 @@ class Profile:
         '''注册回调函数，当操作配置文件时调用'''
         self.callback = callback
         return None
-    
+
     def unregister_callback(self):
         '''注销回调函数'''
         self.callback = None
