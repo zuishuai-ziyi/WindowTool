@@ -64,4 +64,6 @@
 
 新增日志记录功能
 
-![GitHub Repo stars](https://img.shields.io/github/stars/zuishuai-ziyi/WindowTool)
+![GitHub Repo stars](https://img.shields.io/github/stars/zuishuai-ziyi/WindowTool) ![GitHub followers](https://img.shields.io/github/followers/zuishuai-ziyi) ![GitHub forks](https://img.shields.io/github/forks/zuishuai-ziyi/WindowTool)
+
+
