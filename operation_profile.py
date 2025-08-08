@@ -80,12 +80,11 @@ class Profile:
             return False
 
     def _check_iterable(self, obj1: Iterable, obj2: Iterable, using_default: bool) -> bool:
-        # print('check ', obj1, obj2, isinstance(obj1, dict), isinstance(obj2, dict), using_default)
         # 字典
-        if isinstance(obj1, dict) and isinstance(obj2, dict):
-            return self._check_dict(obj1, obj2, using_default)
         if (not isinstance(obj1, Iterable)) or (not isinstance(obj2, Iterable)):
             return False
+        if isinstance(obj1, dict) and isinstance(obj2, dict):
+            return self._check_dict(obj1, obj2, using_default)
         # 其他可迭代对象
         try:
             for elem1, elem2 in zip(obj1, obj2, strict=True):  # strict=True 确保长度相等
@@ -95,49 +94,40 @@ class Profile:
                 if using_default and ((not isinstance(elem2, Iterable)) or isinstance(elem2, str)):
                     # 使用默认值，获取值的类型
                     elem2 = type(elem2)
-                # print('list fot iterable check ', elem1, elem2, using_default, isinstance(elem2, Iterable), isinstance(elem2, str))
-                # print('list for ', elem1, elem2)
                 if isinstance(elem2, Iterable):
                     # d2包含可迭代对象，检查d1
                     if not isinstance(elem1, Iterable):
                         return False
                     # 递归检查
-                    # print(f'递归检查 {elem1}, {elem2}, {type(elem1)}, {type(elem2)}')
                     if not self._check_iterable(elem1, elem2, using_default):
                         return False
                     continue
-                # print(elem1, elem2)
                 if not isinstance(elem1, elem2):
                     return False
         except ValueError:  # 长度不相等，返回 False
             return False
         return True
-    
+
     def _check_dict(self, d1: Dict[Any, Any], d2: Dict[Any, Any], using_default: bool) -> bool:
-        # print('dict check ', d1, '\n', d2)
         # 检查键是否相同
-        if not any(isinstance(n, TypeIgnore) for n in d2) and d1.keys() != d2.keys():
+        if d1.keys() != d2.keys():
             return False
+
         for k in d2:
             v1, v2 = d1[k], d2[k]
-            if using_default and ((not isinstance(v2, Iterable)) or isinstance(v2, str)):
-                # 使用默认值，获取值的类型
+            if isinstance(v2, TypeIgnore):
+                # 忽略该项
+                continue
+            if using_default and (isinstance(v2, str) or not isinstance(v2, Iterable)):
                 v2 = type(v2)
-            # print('dict for ', v1, v2)
+
             if isinstance(v2, type):
-                # print('check dict for type ', v1, v2)
-                # d2包含类型，直接检查类型是否正确
                 if not isinstance(v1, v2):
                     return False
             elif isinstance(v2, Iterable):
-                # d2包含可迭代对象，递归检查
                 if not self._check_iterable(v1, v2, using_default):
                     return False
-            elif isinstance(v2, TypeIgnore):
-                # 忽略该项
-                continue
             else:
-                # d2包含无效值
                 return False
         return True
 
@@ -156,14 +146,12 @@ class Profile:
             value = api.get_value_from_path(data, path)
             if isinstance(value, TypeIgnore):
                 # 如果是列表，设置为 TypeIgnore.data
-                print(f'list {path} {new_data}')
                 if path[:-1]:
                     # 不是根目录
                     api.get_value_from_path(new_data, path[:-1])[path[-1]] = value.data # type: ignore
                 else:
                     # 是根目录
                     new_data[path[0]] = value.data # type: ignore
-        print(data)
         api.deep_search(data, callback)
         # 创建文件
         with open(self.file, 'a+', encoding='utf-8') as f:
@@ -204,7 +192,7 @@ class Profile:
         return None
 
 if __name__ == '__main__':
-    obj = Profile('data\\profile\\data.yaml')
+    obj = Profile('test_of_operation_profile.yaml')
     # obj.set_default({
     #     'a': 1,
     #     'b': 2,
@@ -231,16 +219,19 @@ if __name__ == '__main__':
     #     #     ]
     #     # }
     # )
-    obj.set_default({
-        'a': TypeIgnore(),
-        'set_up': {
-          'keep_work_time': -1.0,
-          'on_top_time': -1.0,
-          'on_top_with_UIAccess': True,
-          'show_error_box': True,
-          'show_info_box': True,
-          'show_warning_box': True
+    obj.set_default(
+        {
+            'a': TypeIgnore(1),
+            'b': 2,
+            'c': [
+              {
+                "name": "test",
+                "age": 18
+              },
+              10,
+              'aaa'
+            ]
         }
-    })
+    )
     res = obj.check_file()
     print(res)
