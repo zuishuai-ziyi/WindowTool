@@ -45,21 +45,26 @@ class Profile:
         '''更改配置文件置顶键值对的内容'''
         path = self._get_file_path_or_raise_err(file_path)
         data = self.get()
+        old_value = data.get(key, None)
         with open(path, 'w+', encoding='utf-8') as f:
             # print(data)
             data[key] = value
             yaml.dump(data, f)
         if self.callback and using_callback:
-            self.callback(OperationType.SET_ITEM, {"key": key, "new_value": value})
+            self.callback(OperationType.SET_ITEM, {"key": key, "old_value": old_value, "new_value": value})
         return
 
     def set_all(self, data, *, file_path: None | str = None, using_callback: bool = True):
         '''设置配置文件内容'''
         path = self._get_file_path_or_raise_err(file_path)
+        try:
+            old_value = self.get()
+        except Exception:
+            old_value = None
         with open(path, 'w+', encoding='utf-8') as f:
             yaml.dump(data, f)
         if self.callback and using_callback:
-            self.callback(OperationType.SET_ALL, {"new_value": data})
+            self.callback(OperationType.SET_ALL, {"old_value": old_value, "new_value": data})
         return
 
     def set_default(self, data: Dict[str, Any]):

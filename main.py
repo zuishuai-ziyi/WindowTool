@@ -78,10 +78,7 @@ class MainWindow(QWidget):
         # 启动热键监听
         self.hotkey_triggered.connect(lambda: self.slot_of_start_get_window_button() and None)
         if profile_obj['set_up']['allow_hotkey_start_choose']:
-            keyboard.add_hotkey(
-                '+'.join(profile_obj['set_up']['start_choose_window_hotkey']),
-                lambda: self.hotkey_triggered.emit() if not self.is_getting_info else None
-            )
+            self.re_register_start_choose_window_hotkey(None)
 
     def changeEvent(self, event: QEvent | None) -> None:
         if profile_obj.get('set_up').get('allow_minimize', True) == False:
@@ -606,13 +603,27 @@ class MainWindow(QWidget):
             if isinstance(data['new_value'].get('keep_work_time', None), (float, int)):
                 self.stop_and_start_timer('keep_work', 'keep_work_time')
             self.change_tray_icon_visible(data)
+            self.re_register_start_choose_window_hotkey('+'.join(data['old_value']['start_choose_window_hotkey']))
         elif op_type == OperationType.SET_ALL and data['key'] == 'set_up':
             self.stop_and_start_timer('on_top', 'on_top_time')
             self.stop_and_start_timer('keep_work', 'keep_work_time')
             self.change_tray_icon_visible(data)
+            self.re_register_start_choose_window_hotkey('+'.join(data['old_value']['start_choose_window_hotkey']))
         else:
             ...
-    
+
+    def re_register_start_choose_window_hotkey(self, old_hotkey: str | None):
+        '''重新注册开始选择窗口热键'''
+        if old_hotkey is not None:
+            keyboard.remove_hotkey(
+                old_hotkey,
+            )
+        hotkey = '+'.join(profile_obj['set_up']['start_choose_window_hotkey'])
+        keyboard.add_hotkey(
+            hotkey,
+            lambda: self.hotkey_triggered.emit() if not self.is_getting_info else None
+        )
+
     def change_tray_icon_visible(self, data: OperationData) -> None:
         '''检查并切换托盘图标可见状态'''
         if isinstance(data['new_value'].get('show_tray_icon', None), bool):
