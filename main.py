@@ -108,10 +108,18 @@ class MainWindow(QWidget):
         text = QLabel("点击按钮后，将鼠标移至其他窗口以获取窗口信息")
         main_layout.addWidget(text)
 
+        # 添加 开始获取窗口按钮 布局
+        start_get_window_button_layout = QHBoxLayout()
         # 添加 开始获取窗口 按钮
         self.start_get_window_button = QPushButton("开始获取")
         self.start_get_window_button.clicked.connect(self.slot_of_start_get_window_button)
-        main_layout.addWidget(self.start_get_window_button)
+        start_get_window_button_layout.addWidget(self.start_get_window_button)
+        # 添加 从窗口列表中获取窗口 按钮
+        self.start_get_window_button_from_list = QPushButton("从窗口列表中获取")
+        self.start_get_window_button_from_list.clicked.connect(self.slot_of_start_get_window_button_from_list)
+        start_get_window_button_layout.addWidget(self.start_get_window_button_from_list)
+        # 添加 开始获取窗口按钮 布局 至 主布局
+        main_layout.addLayout(start_get_window_button_layout)
 
         # 添加 窗口数据布局
         self.selec_window_info_layout = QFormLayout()
@@ -767,6 +775,15 @@ class MainWindow(QWidget):
 
         self.sel_wind_info_widgets['process_pid']['obj'].setText(str(self.select_pid))
         self.sel_wind_info_widgets['process_hwnd']['obj'].setText(str(self.select_hwnd))
+    
+    def slot_of_start_get_window_button_from_list(self):
+        '''从列表中选择窗口'''
+        log.debug('开始从窗口列表中获取窗口信息')
+        if self.is_getting_info:
+            self.start_get_window_button.setEnabled(True)
+            # TODO
+        else:
+            self.start_get_window_button.setEnabled(False)
 
     def slot_of_start_get_window_button(self):
         '''开始获取窗口信息'''
@@ -776,11 +793,13 @@ class MainWindow(QWidget):
             self.init_overlay_attribute()
             self.start_get_window_button.setText("开始获取")
             self.is_getting_info = False
+            self.start_get_window_button_from_list.setEnabled(True)
         else:
             self.update_sele_wind_timer.start(50)
             self.start_get_window_button.setText("停止获取")
             self.showMinimized()
             self.is_getting_info = True
+            self.start_get_window_button_from_list.setEnabled(False)
 
     def get_pos(self, hwnd):
         '''获取窗口位置和尺寸信息 返回值格式：left, top, right, bottom, width, height'''
@@ -867,6 +886,7 @@ class MainWindow(QWidget):
         '''暂停获取窗口信息'''
         self.is_getting_info = False
         self.start_get_window_button.setText("开始获取")
+        self.start_get_window_button_from_list.setEnabled(True)
         if self.TOW_obj:
             self.TOW_obj.hide()
 
@@ -900,6 +920,9 @@ class SetUpWindow(QDialog):
     '''配置是否保存，数据结构如下，其中 data 为更新后的设置项：\n{"save":(bool), "data":{...}}。\n若保存，则 save 为 True；\n若不保存，则 save 为 False，此时 data 为 None'''
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+
+        # 自动销毁窗口，防止内存泄漏
+        self.setAttribute(Qt.WA_DeleteOnClose) # type: ignore
 
         # 初始化窗口属性
         self.setWindowTitle("设置")
@@ -1165,6 +1188,25 @@ class AboutWindow(QDialog):
         self.main_layout.addLayout(button_layout)
         # 设置窗口布局
         self.setLayout(self.main_layout)
+
+
+
+class ChooseWindowList(QDialog):
+    '''选择窗口列表窗口'''
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        # 设置基本属性
+        self.setWindowTitle('选择窗口')
+        self.setWindowIcon(QIcon(get_file_path('data\\icon\\choose.png')))
+        self.initUI()
+    
+    def initUI(self):
+        # 创建 主布局
+        self.main_layout = QVBoxLayout()
+        # 创建 滚动布局
+        self.scroll_layout = QScrollArea()
+        # 创建 滚动布局 布局
+        self.scroll_layout_layout = QVBoxLayout()
 
 
 
