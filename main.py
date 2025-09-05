@@ -1,5 +1,5 @@
 from transparent_overlay_window import TransparentOverlayWindow as TOW
-from PyQt5.QtWidgets import QApplication, QMessageBox, QWidget, QVBoxLayout, QGridLayout, QLabel, QPushButton, QFormLayout, QHBoxLayout, QDialog, QLineEdit, QCheckBox, QSizePolicy, QSystemTrayIcon, QMenu
+from PyQt5.QtWidgets import QApplication, QMessageBox, QWidget, QVBoxLayout, QGridLayout, QLabel, QPushButton, QFormLayout, QHBoxLayout, QDialog, QLineEdit, QCheckBox, QSizePolicy, QSystemTrayIcon, QMenu, QListWidget, QListWidgetItem
 from PyQt5.QtGui import QCloseEvent, QIcon, QDoubleValidator, QFontMetrics
 from PyQt5.QtCore import QEvent, Qt, QTimer, pyqtSignal
 from global_value import *
@@ -54,7 +54,7 @@ class MainWindow(QWidget):
         self.setWindowIcon(QIcon(get_file_path('data\\icon\\window.png')))
 
         # 设置窗口标题
-        self.setWindowTitle('Windows')
+        self.setWindowTitle('WindowTool')
 
         # 初始化属性
         self.is_getting_info = False
@@ -781,9 +781,20 @@ class MainWindow(QWidget):
         log.debug('开始从窗口列表中获取窗口信息')
         if self.is_getting_info:
             self.start_get_window_button.setEnabled(True)
-            # TODO
         else:
+            log.debug('显示窗口列表选择窗口')
             self.start_get_window_button.setEnabled(False)
+            choos_window_list_window = ChooseWindowList(self)
+            choos_window_list_window.signal.connect(self.slot_of_selected_window_from_list)
+            choos_window_list_window.exec()
+    
+    def slot_of_selected_window_from_list(self, hwnd: int) -> None:
+        '''用户已从列表中选择窗口槽函数'''
+        # 设置数据 TODO 添加错误处理和状态更新（按钮等）
+        self.select_hwnd = hwnd
+        self.select_pid = win32process.GetWindowThreadProcessId(hwnd)[1] # type: ignore
+        self.select_obj = psutil.Process(self.select_pid) # type: ignore
+        self.update_input_box()
 
     def slot_of_start_get_window_button(self):
         '''开始获取窗口信息'''
@@ -1193,6 +1204,8 @@ class AboutWindow(QDialog):
 
 class ChooseWindowList(QDialog):
     '''选择窗口列表窗口'''
+    signal = pyqtSignal(int)
+    '''关闭窗口信号。携带选中窗口 HWND；-1 表示未选中窗口'''
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         # 设置基本属性
@@ -1201,12 +1214,67 @@ class ChooseWindowList(QDialog):
         self.initUI()
     
     def initUI(self):
+        # 最后选中窗口 HWND
+        self.selected_hwnd: int | None = None
+        # 创建 更新窗口列表 计时器
+        self.update_window_list_timer = QTimer(self)
+        self.update_window_list_timer.timeout.connect(self.slot_of_update_window_list)
         # 创建 主布局
         self.main_layout = QVBoxLayout()
-        # 创建 滚动布局
-        self.scroll_layout = QScrollArea()
-        # 创建 滚动布局 布局
-        self.scroll_layout_layout = QVBoxLayout()
+        # 创建列表布局
+        self.window_list = QListWidget()
+        self.window_list.itemClicked.connect(self.slot_of_select_item)
+        self.main_layout.addWidget(self.window_list)
+        # 添加确定按钮
+        self.ok_button = QPushButton('确定')
+        self.ok_button.clicked.connect(self.slot_of_ok_button)
+        self.main_layout.addWidget(self.ok_button)
+        # 设置窗口布局
+        self.setLayout(self.main_layout)
+        # 开始更新窗口列表
+        self.slot_of_update_window_list()  # 初始化
+        self.update_window_list_timer.start(100)
+
+    def slot_of_update_window_list(self):
+        '''更新窗口列表'''
+        # 记录选中项目
+        selected_hwnd = self.window_list.currentItem().data(Qt.UserRole) if self.window_list.currentItem() else None # type: ignore
+        # 记录滚动条位置
+        if (scroll_bar := self.window_list.verticalScrollBar()) is not None:
+            scroll_bar_value = scroll_bar.value()
+        # 匹配项目的下标
+        match_item_index = None
+        # 清空列表
+        self.window_list.clear()
+        def callback(hwnd, _):
+            nonlocal match_item_index
+            if title := win32gui.GetWindowText(hwnd):
+                item = QListWidgetItem(f"{title} ({hwnd})")
+                item.setData(Qt.UserRole, hwnd) # type: ignore
+                if hwnd == selected_hwnd:
+                    match_item_index = self.window_list.count()
+                self.window_list.addItem(item)
+            return True
+        win32gui.EnumWindows(callback, None)
+        # 恢复选中项目
+        if match_item_index:
+            self.window_list.setCurrentRow(match_item_index)
+        # 恢复滚动条位置
+        if (scroll_bar := self.window_list.verticalScrollBar()) is not None:
+            scroll_bar.setValue(scroll_bar_value)
+    
+    def slot_of_select_item(self, item: QListWidgetItem):
+        '''选中项目槽函数'''
+        self.selected_hwnd = item.data(Qt.UserRole) # type: ignore
+        print(f'选中窗口：{self.selected_hwnd}')
+    
+    def slot_of_ok_button(self):
+        '''确定按钮槽函数'''
+        self.signal.emit(-1 if self.selected_hwnd is None else self.selected_hwnd)
+    
+    def closeEvent(self, event: QCloseEvent) -> None:
+        '''关闭窗口槽函数'''
+        self.signal.emit(-1)
 
 
 
@@ -1312,7 +1380,7 @@ def exit_the_app(code: ExitCode | int = ExitCode.SUCCESS, reason: str = '(无原
                 log(f'即将运行以下命令进行重启: {cmd}')
                 subprocess.Popen(cmd)
     else:
-        log.warning(f'程序因其他原因退出 | 退出代码 {code} 原因 {reason}')
+        log.info(f'程序因其他原因退出 | 退出代码 {code} 原因 {reason}')
 
     # 释放资源
     free_resource()
@@ -1374,7 +1442,7 @@ def init() -> argparse.Namespace | None:
                 log.warning(f'UIAccess 加载失败:\n{traceback.format_exc()}')
         else:
             log('无管理员权限，无法启用 UIAccess')
-            if MessageBox(parent=None, title="提示", top_info="无法启用 UIAccess：权限不足", info='是否提升权限并启用？', buttons=('提权并启用', '不提权并继续')) == '提权并启用':
+            if MessageBox(parent=None, title="提示", top_info="无法启用 UIAccess 置顶：权限不足", info='是否提升权限并启用？', buttons=('提权并启用', '不提权并继续')) == '提权并启用':
                 log("尝试提权并重启")
                 run_again_as_admin()
             log('不提权并继续')
@@ -1402,7 +1470,7 @@ if __name__ == "__main__":
         if profile_obj['set_up']['show_tray_icon']:
             tray_icon.show()
         # 运行应用程序事件循环
-        exit_the_app(app.exec(), reason='应用程序所有窗口均被关闭')
+        exit_the_app(app.exec(), reason='应用程序事件循环结束')
     except:
         log.critical(f"发生错误:\n{traceback.format_exc()}")
         if hasattr(sys, 'frozen'):
