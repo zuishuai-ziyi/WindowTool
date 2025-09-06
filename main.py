@@ -780,21 +780,29 @@ class MainWindow(QWidget):
         '''从列表中选择窗口'''
         log.debug('开始从窗口列表中获取窗口信息')
         if self.is_getting_info:
-            self.start_get_window_button.setEnabled(True)
+            ...
         else:
             log.debug('显示窗口列表选择窗口')
-            self.start_get_window_button.setEnabled(False)
-            choos_window_list_window = ChooseWindowList(self)
-            choos_window_list_window.signal.connect(self.slot_of_selected_window_from_list)
-            choos_window_list_window.exec()
-    
-    def slot_of_selected_window_from_list(self, hwnd: int) -> None:
+            self.choos_window_list_window = ChooseWindowList(self)
+            self.choos_window_list_window.signal_hwnd.connect(self.slot_of_selected_window_from_list)
+            self.choos_window_list_window.exec_()
+
+    def slot_of_selected_window_from_list(self, hwnd) -> None:
         '''用户已从列表中选择窗口槽函数'''
-        # 设置数据 TODO 添加错误处理和状态更新（按钮等）
+        log.log(f'用户已从列表中选择窗口 HWND: {hwnd}')
+        # 检查窗口是否有效
+        if hwnd <= 0:
+            return
         self.select_hwnd = hwnd
-        self.select_pid = win32process.GetWindowThreadProcessId(hwnd)[1] # type: ignore
-        self.select_obj = psutil.Process(self.select_pid) # type: ignore
-        self.update_input_box()
+        self.select_pid = win32process.GetWindowThreadProcessId(hwnd)[1]
+        try:
+            self.select_obj = psutil.Process(self.select_pid)
+        except (ValueError, psutil.NoSuchProcess):
+            log.log(f'PID无效({self.select_pid})')
+        else:
+            self.update_input_box()
+        # 设置按钮状态
+        self.start_get_window_button.setEnabled(True)
 
     def slot_of_start_get_window_button(self):
         '''开始获取窗口信息'''
@@ -1204,10 +1212,14 @@ class AboutWindow(QDialog):
 
 class ChooseWindowList(QDialog):
     '''选择窗口列表窗口'''
-    signal = pyqtSignal(int)
+    signal_hwnd = pyqtSignal(int)
     '''关闭窗口信号。携带选中窗口 HWND；-1 表示未选中窗口'''
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+
+        # 自动销毁窗口，防止内存泄漏
+        self.setAttribute(Qt.WA_DeleteOnClose) # type: ignore
+
         # 设置基本属性
         self.setWindowTitle('选择窗口')
         self.setWindowIcon(QIcon(get_file_path('data\\icon\\choose.png')))
@@ -1216,6 +1228,8 @@ class ChooseWindowList(QDialog):
     def initUI(self):
         # 最后选中窗口 HWND
         self.selected_hwnd: int | None = None
+        # 关闭窗口时是否不发送信号
+        self.close_with_no_emit = False
         # 创建 更新窗口列表 计时器
         self.update_window_list_timer = QTimer(self)
         self.update_window_list_timer.timeout.connect(self.slot_of_update_window_list)
@@ -1223,7 +1237,7 @@ class ChooseWindowList(QDialog):
         self.main_layout = QVBoxLayout()
         # 创建列表布局
         self.window_list = QListWidget()
-        self.window_list.itemClicked.connect(self.slot_of_select_item)
+        self.window_list.currentItemChanged.connect(self.slot_of_select_item)
         self.main_layout.addWidget(self.window_list)
         # 添加确定按钮
         self.ok_button = QPushButton('确定')
@@ -1239,6 +1253,7 @@ class ChooseWindowList(QDialog):
         '''更新窗口列表'''
         # 记录选中项目
         selected_hwnd = self.window_list.currentItem().data(Qt.UserRole) if self.window_list.currentItem() else None # type: ignore
+        log.debug(selected_hwnd)
         # 记录滚动条位置
         if (scroll_bar := self.window_list.verticalScrollBar()) is not None:
             scroll_bar_value = scroll_bar.value()
@@ -1252,12 +1267,13 @@ class ChooseWindowList(QDialog):
                 item = QListWidgetItem(f"{title} ({hwnd})")
                 item.setData(Qt.UserRole, hwnd) # type: ignore
                 if hwnd == selected_hwnd:
+                    log.debug(f"匹配到项目：{title} ({hwnd})")
                     match_item_index = self.window_list.count()
                 self.window_list.addItem(item)
             return True
         win32gui.EnumWindows(callback, None)
         # 恢复选中项目
-        if match_item_index:
+        if match_item_index is not None:
             self.window_list.setCurrentRow(match_item_index)
         # 恢复滚动条位置
         if (scroll_bar := self.window_list.verticalScrollBar()) is not None:
@@ -1265,16 +1281,22 @@ class ChooseWindowList(QDialog):
     
     def slot_of_select_item(self, item: QListWidgetItem):
         '''选中项目槽函数'''
+        if item is None:
+            self.selected_hwnd = None
+            return
         self.selected_hwnd = item.data(Qt.UserRole) # type: ignore
-        print(f'选中窗口：{self.selected_hwnd}')
-    
+
     def slot_of_ok_button(self):
         '''确定按钮槽函数'''
-        self.signal.emit(-1 if self.selected_hwnd is None else self.selected_hwnd)
+        self.signal_hwnd.emit(-1 if (self.selected_hwnd is None) else self.selected_hwnd)
+        self.close_with_no_emit = True
+        self.close()
     
     def closeEvent(self, event: QCloseEvent) -> None:
         '''关闭窗口槽函数'''
-        self.signal.emit(-1)
+        if not self.close_with_no_emit:
+            self.signal_hwnd.emit(-1)
+        return super().closeEvent(event)
 
 
 
