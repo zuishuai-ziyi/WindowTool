@@ -1,7 +1,7 @@
 from transparent_overlay_window import TransparentOverlayWindow as TOW
-from PyQt5.QtWidgets import QApplication, QMessageBox, QWidget, QVBoxLayout, QGridLayout, QLabel, QPushButton, QFormLayout, QHBoxLayout, QDialog, QLineEdit, QCheckBox, QSizePolicy, QSystemTrayIcon, QMenu, QListWidget, QListWidgetItem
-from PyQt5.QtGui import QCloseEvent, QIcon, QDoubleValidator, QFontMetrics
-from PyQt5.QtCore import QEvent, Qt, QTimer, pyqtSignal
+from PyQt5.QtWidgets import QApplication, QMessageBox, QWidget, QVBoxLayout, QGridLayout, QLabel, QPushButton, QFormLayout, QHBoxLayout, QDialog, QLineEdit, QCheckBox, QSizePolicy, QSystemTrayIcon, QMenu, QListWidget, QListWidgetItem, QTableView
+from PyQt5.QtGui import QCloseEvent, QIcon, QDoubleValidator, QFontMetrics, QStandardItemModel, QStandardItem
+from PyQt5.QtCore import QEvent, Qt, QTimer, pyqtSignal, QItemSelectionModel
 from global_value import *
 from api import get_top_window_under_mouse, get_window_pos_and_size, get_file_path, load_UIAccess_lib, get_session_id
 from kill_process import kill_process
@@ -1223,6 +1223,7 @@ class ChooseWindowList(QDialog):
         # 设置基本属性
         self.setWindowTitle('选择窗口')
         self.setWindowIcon(QIcon(get_file_path('data\\icon\\choose.png')))
+        self.resize(800, 500)
         self.initUI()
     
     def initUI(self):
@@ -1235,10 +1236,20 @@ class ChooseWindowList(QDialog):
         self.update_window_list_timer.timeout.connect(self.slot_of_update_window_list)
         # 创建 主布局
         self.main_layout = QVBoxLayout()
-        # 创建列表布局
-        self.window_list = QListWidget()
-        self.window_list.currentItemChanged.connect(self.slot_of_select_item)
-        self.main_layout.addWidget(self.window_list)
+        # 创建表格控件模型
+        self.window_table_model = QStandardItemModel()
+        self.window_table_model.setHorizontalHeaderLabels(["窗口句柄", "窗口标题"])
+        # 创建表格控件
+        self.window_table = QTableView()
+        self.window_table.setModel(self.window_table_model)
+        self.window_table.clicked.connect(self.slot_of_select_item)
+        self.window_table.setEditTriggers(QTableView.NoEditTriggers)  # 只读
+        self.window_table.setSelectionBehavior(QTableView.SelectRows)  # 每次选中整行
+        self.window_table.setAlternatingRowColors(True)  # 行颜色交替
+        self.window_table.setSelectionMode(QTableView.SingleSelection)  # 强制单选行
+        if (header := self.window_table.verticalHeader()) is not None:
+            header.setVisible(False)  # 隐藏垂直表头
+        self.main_layout.addWidget(self.window_table)
         # 添加确定按钮
         self.ok_button = QPushButton('确定')
         self.ok_button.clicked.connect(self.slot_of_ok_button)
@@ -1252,35 +1263,68 @@ class ChooseWindowList(QDialog):
     def slot_of_update_window_list(self):
         '''更新窗口列表'''
         # 记录选中项目
-        selected_hwnd = self.window_list.currentItem().data(Qt.UserRole) if self.window_list.currentItem() else None # type: ignore
-        log.debug(selected_hwnd)
+        if (selected_model := self.window_table.selectionModel()) is None:
+            log.error("尝试更新窗口列表时获取到意外数据: 选择模型 为 None")
+            MessageBox(parent=self, title="错误", top_info="尝试更新窗口列表时获取到意外数据:\n表格选择模型 为 None", info="单击“确定”以退出", icon=QMessageBox.Critical)
+            exit_the_app(ExitCode.UNKNOWN_ERROR, reason="尝试更新窗口列表时获取到意外数据:\n选择模型 为 None")
+        else:
+            selected_items = selected_model.selectedRows()
+        selected_hwnd = None
+        if selected_items:
+            # 获取当前选中的窗口句柄
+            index = selected_items[0]
+            item = self.window_table_model.itemFromIndex(index)
+            selected_hwnd = item.data(Qt.UserRole) if item else None # type: ignore
         # 记录滚动条位置
-        if (scroll_bar := self.window_list.verticalScrollBar()) is not None:
+        if (scroll_bar := self.window_table.verticalScrollBar()) is not None:
             scroll_bar_value = scroll_bar.value()
         # 匹配项目的下标
         match_item_index = None
-        # 清空列表
-        self.window_list.clear()
+        # 清空表格
+        self.window_table_model.removeRows(0, self.window_table_model.rowCount())
         def callback(hwnd, _):
             nonlocal match_item_index
-            if title := win32gui.GetWindowText(hwnd):
-                item = QListWidgetItem(f"{title} ({hwnd})")
-                item.setData(Qt.UserRole, hwnd) # type: ignore
-                if hwnd == selected_hwnd:
-                    log.debug(f"匹配到项目：{title} ({hwnd})")
-                    match_item_index = self.window_list.count()
-                self.window_list.addItem(item)
+            # 获取标题
+            title_obj = QStandardItem(
+                title if (title := win32gui.GetWindowText(hwnd)) else ""
+            )
+            # 获取窗口句柄
+            hwnd_obj = QStandardItem(str(hwnd))
+            if hwnd == selected_hwnd:
+                match_item_index = self.window_table_model.rowCount()
+            hwnd_obj.setData(hwnd, Qt.UserRole) # type: ignore
+            self.window_table_model.appendRow([
+                hwnd_obj,
+                title_obj,
+            ])
             return True
         win32gui.EnumWindows(callback, None)
         # 恢复选中项目
         if match_item_index is not None:
-            self.window_list.setCurrentRow(match_item_index)
+            self.select_row(match_item_index)
+            # 设置 选中句柄 为 选中项目第一列的数据
+            self.selected_hwnd = self.window_table_model.index(match_item_index, 0).data(Qt.UserRole)  # type: ignore
+        else:
+            self.selected_hwnd = None
         # 恢复滚动条位置
-        if (scroll_bar := self.window_list.verticalScrollBar()) is not None:
+        if (scroll_bar := self.window_table.verticalScrollBar()) is not None:
             scroll_bar.setValue(scroll_bar_value)
-    
+
+    def select_row(self, row):
+        # 创建选择模型实例
+        selection_model = self.window_table.selectionModel()
+        if selection_model is None:
+            return
+        # 清除当前的所有选择
+        selection_model.clearSelection()
+        # 创建一个索引，指定要选择的行
+        index = self.window_table_model.index(row, 0)  # 选择第 row 行的第一列
+        # 选择该行
+        selection_model.select(index, QItemSelectionModel.Select | QItemSelectionModel.Rows) # type: ignore
+
     def slot_of_select_item(self, item: QListWidgetItem):
         '''选中项目槽函数'''
+        log.debug(f"选中项目: {item}")
         if item is None:
             self.selected_hwnd = None
             return
@@ -1291,7 +1335,7 @@ class ChooseWindowList(QDialog):
         self.signal_hwnd.emit(-1 if (self.selected_hwnd is None) else self.selected_hwnd)
         self.close_with_no_emit = True
         self.close()
-    
+
     def closeEvent(self, event: QCloseEvent) -> None:
         '''关闭窗口槽函数'''
         if not self.close_with_no_emit:
