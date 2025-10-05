@@ -12,7 +12,6 @@ from operation_profile import OperationType, OperationData
 from observe_window import ObserveWindow
 from call_run_dialog import ShowRunDialog
 from typing import Any, Dict, Literal, List, Callable, NoReturn, Iterable, overload
-from multipledispatch import dispatch
 from ctypes import wintypes
 import sys, win32gui, win32con, win32process, psutil, keyboard, ctypes, os, traceback, pywintypes, time, threading, webbrowser, re, argparse, functools, subprocess
 
@@ -1422,3 +1421,4 @@ if __name__ == "__main__":
 
 # 打包命令 建议使用 pack.bat 打包
 # pyinstaller main.py --noconsole --add-data "data:data" -i "D:\_ziyi_home_\ziyi_home\文件\code\python\wowo\开发中\windows\data\icon\window.png"
+
