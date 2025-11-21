@@ -109,7 +109,9 @@ class input_box_window(QDialog):
 
 def MessageBox(parent: None | QWidget = None, title: str = '提示', top_info: str = '', info: str = '', icon: QMessageBox.Information | QMessageBox.Warning | QMessageBox.Critical | QMessageBox.Question = QMessageBox.Information, buttons: tuple | list = ('确定', )) -> str | None:
     '''弹出文本框'''
+    log.debug('弹出消息框', title, top_info, info, buttons)
     mes = QMessageBox(parent)
+    log.debug('创建消息框对象', mes)
     mes.addButton(QPushButton(buttons[0]), QMessageBox.YesRole)
     if len(buttons) > 1:
         mes.addButton(QPushButton(buttons[1]), QMessageBox.NoRole)

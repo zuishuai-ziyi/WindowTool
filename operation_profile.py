@@ -33,6 +33,7 @@ class Profile:
 
     def get[T](self, key:str | None = None, default: None | T = None, *, file_path: None | str = None, using_callback: bool = True) -> T | Any:
         '''获取配置文件内容'''
+        print(f'获取配置文件内容 {key} {default} {file_path} {using_callback}')
         path = self._get_file_path_or_raise_err(file_path)
         with open(path, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f)

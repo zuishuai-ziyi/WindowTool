@@ -10,3 +10,4 @@ build
 *temp*
 *.log
 *test*
+main.build
