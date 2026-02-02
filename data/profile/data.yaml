@@ -1,0 +1,27 @@
+select_window_info:
+- display_state: 1
+  has_frame: true
+  id:
+    class_name: ConsoleWindowClass
+    title: D:\Python312\python.exe
+  is_top: false
+  pos:
+  - 338
+  - 318
+  show: true
+  size:
+  - 1368
+  - 776
+set_up:
+  allow_hotkey_start_choose: true
+  keep_work_time: -1.0
+  on_top_time: -1.0
+  on_top_with_UIAccess: true
+  show_error_box: true
+  show_info_box: true
+  show_tray_icon: true
+  show_warning_box: true
+  start_choose_window_hotkey:
+  - ctrl
+  - alt
+  - d

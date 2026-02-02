@@ -793,8 +793,18 @@ class MainWindow(QWidget):
         # 设置数据 TODO 添加错误处理和状态更新（按钮等）
         self.select_hwnd = hwnd
         self.select_pid = win32process.GetWindowThreadProcessId(hwnd)[1] # type: ignore
-        self.select_obj = psutil.Process(self.select_pid) # type: ignore
-        self.update_input_box()
+        # 检查PID是否有效
+        if not isinstance(self.select_pid, int) or self.select_pid <= 0:
+            log.warning(f"无效的PID: {self.select_pid}")
+            MessageBox(parent=self, title='错误', top_info='获取窗口进程信息失败', info=f'无效的PID: {self.select_pid}', icon=QMessageBox.Critical)
+            return
+        try:
+            self.select_obj = psutil.Process(self.select_pid) # type: ignore
+            self.update_input_box()
+        except Exception as e:
+            log.error(f"创建进程对象失败: {e}")
+            MessageBox(parent=self, title='错误', top_info='创建进程对象失败', info=str(e), icon=QMessageBox.Critical)
+            return
 
     def slot_of_start_get_window_button(self):
         '''开始获取窗口信息'''
@@ -1174,6 +1184,9 @@ class AboutWindow(QDialog):
         # 添加文字
         info = QLabel('该软件由 最帅的子逸 制作，以下为部分官方链接')
         self.main_layout.addWidget(info)
+        # 添加贡献者信息
+        contributor_info = QLabel('关于具体贡献者信息，请查看 GitHub 仓库页面')
+        self.main_layout.addWidget(contributor_info)
         # 添加按钮布局，容纳按钮
         button_layout = QHBoxLayout()
         # 添加按钮
@@ -1187,8 +1200,8 @@ class AboutWindow(QDialog):
                 lambda: webbrowser.open('https://github.com/zuishuai-ziyi/WindowTool')
             ],
             [
-                '123网盘下载链接',
-                lambda: webbrowser.open('https://www.123865.com/s/iRadvd-DJQ0v')
+                '官方下载链接',
+                lambda: webbrowser.open('https://xiaoziyi.com/project/1')
             ]
         ]
         for button_list in buttons:
@@ -1401,13 +1414,6 @@ def free_resource() -> None:
 def init() -> argparse.Namespace | None:
     '''初始化'''
     global profile_obj, log, command_line_args
-    # 解析命令行参数
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--hwnd', type=str, default=None, help='需选中窗口的句柄')
-    command_line_args = parser.parse_args()
-    # 验证命令行参数是否有效
-    if not(isinstance(command_line_args.hwnd, str) and command_line_args.hwnd.isnumeric()):
-        command_line_args.hwnd = None
     if profile_obj['set_up']['on_top_with_UIAccess']:
         if is_admin():
             log('已以管理员身份运行，尝试启用 UIAccess...')
@@ -1451,10 +1457,20 @@ def init() -> argparse.Namespace | None:
 
 if __name__ == "__main__":
     try:
-        # 初始化程序
-        init()
+        # 解析命令行参数（在创建QApplication之前）
+        import argparse
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--hwnd', type=str, default=None, help='需选中窗口的句柄')
+        command_line_args = parser.parse_args()
+        # 验证命令行参数是否有效
+        if not(isinstance(command_line_args.hwnd, str) and command_line_args.hwnd.isnumeric()):
+            command_line_args.hwnd = None
+        
         # 创建应用程序实例
         app = QApplication(sys.argv)
+        
+        # 初始化程序
+        init()
         # 创建主窗口
         main_window = MainWindow()
         # 创建托盘图标

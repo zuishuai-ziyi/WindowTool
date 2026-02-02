@@ -1,0 +1,142 @@
+INFO     (18:54:09) ==> 配置文件不存在或存在错误，尝试重置...
+INFO     (18:54:09) ==> 重置成功
+INFO     (18:56:01) ==> 无管理员权限，无法启用 UIAccess
+INFO     (18:56:38) ==> 已以管理员身份运行，尝试启用 UIAccess...
+INFO     (18:56:38) ==> UIAccess 启动成功，PID: 8324
+INFO     (18:56:38) ==> 程序正常退出 | 退出原因 UIAccess 已启动，停止当前进程
+INFO     (18:56:39) ==> 已以管理员身份运行，尝试启用 UIAccess...
+INFO     (18:56:39) ==> UIAccess 已启用
+DEBUG    (18:56:48) ==> 开始获取窗口信息
+DEBUG    (18:56:59) ==> 已选择窗口
+INFO     (18:56:59) ==> 选中窗口句柄为：4524164
+DEBUG    (18:56:59) ==> 尝试访问进程 PID: 8324
+DEBUG    (18:56:59) ==> 访问结束
+DEBUG    (18:56:59) ==> 窗口无历史记录：ConsoleWindowClass - D:\Python312\python.exe
+DEBUG    (18:56:59) ==> 窗口信息已记录
+DEBUG    (18:56:59) ==> 已启动窗口监测器
+DEBUG    (18:57:50) ==> 开始从窗口列表中获取窗口信息
+DEBUG    (18:57:50) ==> 显示窗口列表选择窗口
+INFO     (18:58:18) ==> 已以管理员身份运行，尝试启用 UIAccess...
+INFO     (18:58:18) ==> UIAccess 启动成功，PID: 22792
+INFO     (18:58:18) ==> 程序正常退出 | 退出原因 UIAccess 已启动，停止当前进程
+INFO     (18:58:18) ==> 已以管理员身份运行，尝试启用 UIAccess...
+INFO     (18:58:18) ==> UIAccess 已启用
+DEBUG    (18:58:21) ==> 开始从窗口列表中获取窗口信息
+DEBUG    (18:58:21) ==> 显示窗口列表选择窗口
+INFO     (19:00:50) ==> 无管理员权限，无法启用 UIAccess
+INFO     (19:02:03) ==> 已以管理员身份运行，尝试启用 UIAccess...
+INFO     (19:02:03) ==> 无管理员权限，无法启用 UIAccess
+INFO     (19:02:03) ==> UIAccess 启动成功，PID: 5008
+INFO     (19:02:03) ==> 程序正常退出 | 退出原因 UIAccess 已启动，停止当前进程
+INFO     (19:02:04) ==> 已以管理员身份运行，尝试启用 UIAccess...
+INFO     (19:02:04) ==> UIAccess 已启用
+DEBUG    (19:02:08) ==> 开始从窗口列表中获取窗口信息
+DEBUG    (19:02:08) ==> 显示窗口列表选择窗口
+ERROR    (19:02:09) ==> 创建进程对象失败: process PID not found (pid=73728784)
+ERROR    (19:02:12) ==> 创建进程对象失败: process PID not found (pid=73728784)
+INFO     (19:02:16) ==> 主窗口隐藏
+INFO     (19:02:22) ==> 尝试提权并重启
+INFO     (19:02:22) ==> 不提权并继续
+INFO     (19:02:23) ==> 已以管理员身份运行，尝试启用 UIAccess...
+INFO     (19:02:23) ==> UIAccess 启动成功，PID: 8280
+INFO     (19:02:23) ==> 程序正常退出 | 退出原因 UIAccess 已启动，停止当前进程
+INFO     (19:02:24) ==> 已以管理员身份运行，尝试启用 UIAccess...
+INFO     (19:02:24) ==> UIAccess 已启用
+INFO     (19:02:29) ==> 主窗口隐藏
+INFO     (19:04:09) ==> 已以管理员身份运行，尝试启用 UIAccess...
+INFO     (19:04:09) ==> UIAccess 启动成功，PID: 12692
+INFO     (19:04:09) ==> 程序正常退出 | 退出原因 UIAccess 已启动，停止当前进程
+INFO     (19:04:10) ==> 已以管理员身份运行，尝试启用 UIAccess...
+INFO     (19:04:10) ==> UIAccess 已启用
+DEBUG    (19:04:21) ==> 开始从窗口列表中获取窗口信息
+DEBUG    (19:04:21) ==> 显示窗口列表选择窗口
+WARNING  (19:04:22) ==> 无效的PID: -330235120
+WARNING  (19:04:25) ==> 无效的PID: -330235120
+DEBUG    (19:04:27) ==> 开始从窗口列表中获取窗口信息
+DEBUG    (19:04:27) ==> 显示窗口列表选择窗口
+WARNING  (19:04:28) ==> 无效的PID: -330235120
+INFO     (19:04:38) ==> 主窗口隐藏
+INFO     (19:04:40) ==> 已以管理员身份运行，尝试启用 UIAccess...
+INFO     (19:04:40) ==> UIAccess 启动成功，PID: 28756
+INFO     (19:04:40) ==> 程序正常退出 | 退出原因 UIAccess 已启动，停止当前进程
+INFO     (19:04:41) ==> 已以管理员身份运行，尝试启用 UIAccess...
+INFO     (19:04:41) ==> UIAccess 已启用
+DEBUG    (19:04:45) ==> 开始获取窗口信息
+DEBUG    (19:04:54) ==> 已选择窗口
+INFO     (19:04:54) ==> 选中窗口句柄为：11538574
+DEBUG    (19:04:54) ==> 尝试访问进程 PID: 28756
+DEBUG    (19:04:54) ==> 访问结束
+DEBUG    (19:04:54) ==> 枚举窗口信息：{'display_state': 1, 'has_frame': True, 'id': {'class_name': 'ConsoleWindowClass', 'title': '123'}, 'is_top': False, 'pos': [329, 322], 'show': True, 'size': [1368, 776]}
+DEBUG    (19:04:54) ==> 应用已记录的窗口信息：ConsoleWindowClass - 123
+DEBUG    (19:04:54) ==> 窗口信息已记录
+DEBUG    (19:04:54) ==> 已启动窗口监测器
+INFO     (19:05:24) ==> 主窗口隐藏
+INFO     (19:17:21) ==> 无管理员权限，无法启用 UIAccess
+INFO     (19:17:29) ==> 尝试提权并重启
+INFO     (19:17:30) ==> 不提权并继续
+INFO     (19:17:31) ==> 已以管理员身份运行，尝试启用 UIAccess...
+INFO     (19:17:31) ==> UIAccess 启动成功，PID: 31680
+INFO     (19:17:31) ==> 程序正常退出 | 退出原因 UIAccess 已启动，停止当前进程
+INFO     (19:17:32) ==> 已以管理员身份运行，尝试启用 UIAccess...
+INFO     (19:17:32) ==> UIAccess 已启用
+INFO     (19:17:34) ==> 主窗口隐藏
+INFO     (19:17:34) ==> 主窗口隐藏
+INFO     (19:27:55) ==> 已以管理员身份运行，尝试启用 UIAccess...
+ERROR    (19:27:59) ==> UIAccess.dll 验证失败！大小: 209920, 哈希: {'md5': '07754cba334563479c95fefb72ca14d1', 'sha1': '42995c367c6f57909a0d24704f432a4308979d4c', 'sha224': 'f62bba41d17d2b191f3c65b954a86bebb6d0d954f2a3750f8fa53db9', 'sha256': '8b4ec1ae7fd69d314100e0c0556d45a87b40576f4d1819ddc5880c6ef00501de', 'sha384': '1275489a65467926dc8e761802adb182d064b1b263749a5187b227bffde64bb4f5e6855fb821757dd7e306af65c8bcf3', 'sha512': '37ee6705601c5ea293566862894bfaea7fab7c53d6867cf725e7b13a00a7e1f1768939c4eae3747e1b0472bb226de08c2babdfcd52a1859a0214cc0b929f088f', 'blake2b': '56e50d7eb97eea68b3d23b705639169cb25f5dce23b9584d9a517d882d82029d3f9b5a1f508bd69ae7cb32c4dbeb42370e45ef63d7504f5d82098f03c291a11b', 'blake2s': '41f95fe1c7e20ddc23be1fe7dc3e11afebed53ae7b0449cbdae84b26d1731ee5', 'sha3_224': '8800138effefc64f09465eaf777c74698de1cb0c74ef29e937fbfcaf', 'sha3_256': '79dd4211a744dc850a8880f66ea84e6ee5cf9b251a231a2e86b6fad4912a5a3c'}
+INFO     (19:28:03) ==> 主窗口隐藏
+INFO     (19:28:32) ==> 已以管理员身份运行，尝试启用 UIAccess...
+ERROR    (19:28:35) ==> UIAccess.dll 验证失败！大小: 209920, 哈希: {'md5': '07754cba334563479c95fefb72ca14d1', 'sha1': '42995c367c6f57909a0d24704f432a4308979d4c', 'sha224': 'f62bba41d17d2b191f3c65b954a86bebb6d0d954f2a3750f8fa53db9', 'sha256': '8b4ec1ae7fd69d314100e0c0556d45a87b40576f4d1819ddc5880c6ef00501de', 'sha384': '1275489a65467926dc8e761802adb182d064b1b263749a5187b227bffde64bb4f5e6855fb821757dd7e306af65c8bcf3', 'sha512': '37ee6705601c5ea293566862894bfaea7fab7c53d6867cf725e7b13a00a7e1f1768939c4eae3747e1b0472bb226de08c2babdfcd52a1859a0214cc0b929f088f', 'blake2b': '56e50d7eb97eea68b3d23b705639169cb25f5dce23b9584d9a517d882d82029d3f9b5a1f508bd69ae7cb32c4dbeb42370e45ef63d7504f5d82098f03c291a11b', 'blake2s': '41f95fe1c7e20ddc23be1fe7dc3e11afebed53ae7b0449cbdae84b26d1731ee5', 'sha3_224': '8800138effefc64f09465eaf777c74698de1cb0c74ef29e937fbfcaf', 'sha3_256': '79dd4211a744dc850a8880f66ea84e6ee5cf9b251a231a2e86b6fad4912a5a3c'}
+INFO     (19:28:39) ==> 主窗口隐藏
+INFO     (19:34:33) ==> 已以管理员身份运行，尝试启用 UIAccess...
+INFO     (19:34:33) ==> 文件 UIAccess.dll 验证通过
+INFO     (19:34:33) ==> UIAccess 启动成功，PID: 12856
+INFO     (19:34:33) ==> 程序正常退出 | 退出原因 UIAccess 已启动，停止当前进程
+INFO     (19:34:34) ==> 已以管理员身份运行，尝试启用 UIAccess...
+INFO     (19:34:34) ==> 文件 UIAccess.dll 验证通过
+INFO     (19:34:34) ==> UIAccess 已启用
+INFO     (19:34:38) ==> 主窗口隐藏
+INFO     (19:46:06) ==> 无管理员权限，无法启用 UIAccess
+INFO     (19:46:09) ==> 尝试提权并重启
+INFO     (19:46:10) ==> 不提权并继续
+INFO     (19:46:11) ==> 已以管理员身份运行，尝试启用 UIAccess...
+INFO     (19:46:11) ==> 文件 UIAccess.dll 验证通过
+INFO     (19:46:11) ==> UIAccess 启动成功，PID: 32468
+INFO     (19:46:11) ==> 程序正常退出 | 退出原因 UIAccess 已启动，停止当前进程
+INFO     (19:46:12) ==> 已以管理员身份运行，尝试启用 UIAccess...
+INFO     (19:46:12) ==> 文件 UIAccess.dll 验证通过
+INFO     (19:46:12) ==> UIAccess 已启用
+INFO     (19:46:14) ==> 主窗口隐藏
+INFO     (19:46:21) ==> 已以管理员身份运行，尝试启用 UIAccess...
+INFO     (19:46:21) ==> 文件 UIAccess.dll 验证通过
+INFO     (19:46:21) ==> UIAccess 启动成功，PID: 26880
+INFO     (19:46:21) ==> 程序正常退出 | 退出原因 UIAccess 已启动，停止当前进程
+INFO     (19:46:22) ==> 已以管理员身份运行，尝试启用 UIAccess...
+INFO     (19:46:22) ==> 文件 UIAccess.dll 验证通过
+INFO     (19:46:22) ==> UIAccess 已启用
+INFO     (19:46:29) ==> 已以管理员身份运行，尝试启用 UIAccess...
+INFO     (19:46:29) ==> 文件 UIAccess.dll 验证通过
+INFO     (19:46:29) ==> UIAccess 启动成功，PID: 36664
+INFO     (19:46:29) ==> 程序正常退出 | 退出原因 UIAccess 已启动，停止当前进程
+INFO     (19:46:30) ==> 已以管理员身份运行，尝试启用 UIAccess...
+INFO     (19:46:30) ==> 文件 UIAccess.dll 验证通过
+INFO     (19:46:30) ==> UIAccess 已启用
+INFO     (19:47:06) ==> 主窗口隐藏
+INFO     (19:49:00) ==> 已以管理员身份运行，尝试启用 UIAccess...
+INFO     (19:49:00) ==> 文件 UIAccess.dll 验证通过
+INFO     (19:49:00) ==> UIAccess 启动成功，PID: 26880
+INFO     (19:49:00) ==> 程序正常退出 | 退出原因 UIAccess 已启动，停止当前进程
+INFO     (19:49:00) ==> 已以管理员身份运行，尝试启用 UIAccess...
+INFO     (19:49:00) ==> 文件 UIAccess.dll 验证通过
+INFO     (19:49:00) ==> UIAccess 已启用
+INFO     (19:49:30) ==> 主窗口隐藏
+DEBUG    (19:50:36) ==> 尝试读取贡献者文件: C:\Users\DELL\Desktop\WindowTool-main\contributors.txt
+DEBUG    (19:50:36) ==> 文件存在，开始读取
+DEBUG    (19:50:36) ==> 读取到的贡献者: ['bilibili:方块之巢']
+INFO     (19:53:14) ==> 已以管理员身份运行，尝试启用 UIAccess...
+INFO     (19:53:14) ==> 文件 UIAccess.dll 验证通过
+INFO     (19:53:15) ==> UIAccess 启动成功，PID: 30380
+INFO     (19:53:15) ==> 程序正常退出 | 退出原因 UIAccess 已启动，停止当前进程
+INFO     (19:53:15) ==> 已以管理员身份运行，尝试启用 UIAccess...
+INFO     (19:53:15) ==> 文件 UIAccess.dll 验证通过
+INFO     (19:53:15) ==> UIAccess 已启用
+INFO     (19:53:27) ==> 主窗口隐藏
