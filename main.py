@@ -1,5 +1,5 @@
 from transparent_overlay_window import TransparentOverlayWindow as TOW
-from PyQt5.QtWidgets import QApplication, QMessageBox, QWidget, QVBoxLayout, QGridLayout, QLabel, QPushButton, QFormLayout, QHBoxLayout, QDialog, QLineEdit, QCheckBox, QSizePolicy, QSystemTrayIcon, QMenu, QListWidget, QListWidgetItem
+from PyQt5.QtWidgets import QApplication, QMessageBox, QWidget, QVBoxLayout, QGridLayout, QLabel, QPushButton, QFormLayout, QHBoxLayout, QDialog, QLineEdit, QCheckBox, QSizePolicy, QSystemTrayIcon, QMenu, QListWidget, QListWidgetItem, QScrollArea
 from PyQt5.QtGui import QCloseEvent, QIcon, QDoubleValidator, QFontMetrics
 from PyQt5.QtCore import QEvent, Qt, QTimer, pyqtSignal
 from global_value import *
@@ -15,6 +15,13 @@ from typing import Any, Dict, Literal, List, Callable, NoReturn, Iterable, overl
 from multipledispatch import dispatch
 from ctypes import wintypes
 import sys, win32gui, win32con, win32process, psutil, keyboard, ctypes, os, traceback, pywintypes, time, threading, webbrowser, re, argparse, functools, subprocess
+
+# 导入mod管理相关模块
+try:
+    from mod.mod_manager import ModManager
+except Exception as e:
+    log.error(f"导入mod模块时发生错误: {str(e)}")
+    ModManager = None
 
 
 class MainWindow(QWidget):
@@ -61,6 +68,21 @@ class MainWindow(QWidget):
         self.last_on_top_time = time.time()
         self.last_keep_work_time = time.time()
         self.last_sel_window_info = {'pos': None, 'size': None}
+
+        # 初始化mod管理器
+        self.mod_manager = None
+        if ModManager:
+            try:
+                self.mod_manager = ModManager(self)
+                log.info("Mod管理器初始化成功")
+                # 加载并启动所有mod
+                if self.mod_manager:
+                    self.mod_manager.load_all_mods()
+                    self.mod_manager.start_all_mods()
+            except Exception as e:
+                log.error(f"初始化mod管理器时发生错误: {str(e)}")
+                import traceback
+                log.error(traceback.format_exc())
 
         # 设置窗口位置和大小
         screen = app.primaryScreen().availableGeometry() # type: ignore
@@ -438,6 +460,12 @@ class MainWindow(QWidget):
         about_button.clicked.connect(self.slot_of_about_button)
         about_button.setIcon(QIcon(get_file_path('data\\icon\\about.png')))
         self.other_button_layout.addWidget(about_button)
+        # 添加mod管理按钮
+        mod_button = QPushButton('Mod管理')
+        mod_button.clicked.connect(self.slot_of_mod_button)
+        mod_button.setIcon(QIcon(get_file_path('data\icon\mod.png')))
+        self.other_button_layout.addWidget(mod_button)
+        
         # 添加 伸缩空间 至 其他按钮布局，以使按钮左对齐
         self.other_button_layout.addStretch()
         # 将 其他按钮布局 添加至 超级布局
@@ -920,10 +948,36 @@ class MainWindow(QWidget):
         # 上一个被覆盖窗口是否置顶
         self.last_window_is_top = False
     
+    def slot_of_mod_button(self):
+        '''mod管理按钮槽函数'''
+        if not self.mod_manager:
+            MessageBox(
+                self,
+                top_info="Mod管理器未初始化",
+                title="错误",
+                icon=QMessageBox.Critical,
+                buttons=("确定", )
+            )
+            return
+        
+        # 创建并显示mod管理窗口
+        mod_window = ModManagerWindow(self, self.mod_manager)
+        mod_window.exec_()
+
     def closeEvent(self, event: QCloseEvent) -> None:
         '''关闭事件'''
         # 停止获取窗口信息
         self.stop_get_info()
+        
+        # 停止并卸载所有mod
+        if self.mod_manager:
+            try:
+                self.mod_manager.stop_all_mods()
+                self.mod_manager.unload_all_mods()
+                log.info("Mod已全部停止并卸载")
+            except Exception as e:
+                log.error(f"关闭mod时发生错误: {str(e)}")
+        
         # 隐藏/关闭窗口
         if profile_obj.get('set_up', {'show_tray_icon': True}).get('show_tray_icon', True):
             # 显示托盘图标时隐藏窗口
@@ -933,6 +987,348 @@ class MainWindow(QWidget):
         else:
             log('主窗口被关闭')
 
+
+class ModManagerWindow(QDialog):
+    '''mod管理窗口'''
+    def __init__(self, parent: QWidget, mod_manager: Any) -> None:
+        super().__init__(parent)
+        
+        # 自动销毁窗口，防止内存泄漏
+        self.setAttribute(Qt.WA_DeleteOnClose) # type: ignore
+        
+        # 初始化窗口属性
+        self.setWindowTitle("Mod管理")
+        self.setWindowIcon(QIcon(get_file_path("data\icon\window.png")))
+        self.setFixedSize(600, 400)
+        self.setWindowFlag(Qt.Dialog) # type: ignore
+        
+        # 存储mod管理器
+        self.mod_manager = mod_manager
+        
+        # 初始化界面
+        self.init_ui()
+    
+    def init_ui(self) -> None:
+        '''初始化界面'''
+        # 创建主布局
+        self.main_layout = QVBoxLayout()
+        
+        # 添加标题
+        title = QLabel("Mod管理")
+        title.setStyleSheet("""
+            QLabel {
+                color: black;
+                font-weight: bold;
+                qproperty-alignment: AlignCenter;
+                font-size: 20px;
+            }
+        """)
+        self.main_layout.addWidget(title)
+        
+        # 添加mod列表区域
+        self.mod_list_widget = QWidget()
+        self.mod_list_layout = QVBoxLayout(self.mod_list_widget)
+        
+        # 添加滚动区域
+        scroll_area = QScrollArea()
+        scroll_area.setWidget(self.mod_list_widget)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFixedHeight(250)
+        self.main_layout.addWidget(scroll_area)
+        
+        # 刷新mod列表
+        self.refresh_mod_list()
+        
+        # 添加按钮布局
+        button_layout = QHBoxLayout()
+        
+        # 添加刷新按钮
+        refresh_button = QPushButton("刷新")
+        refresh_button.clicked.connect(self.refresh_mod_list)
+        button_layout.addWidget(refresh_button)
+        
+        # 添加打开mods文件夹按钮
+        open_folder_button = QPushButton("打开Mods文件夹")
+        open_folder_button.clicked.connect(self.open_mods_folder)
+        button_layout.addWidget(open_folder_button)
+        
+        # 添加加载所有mod按钮
+        load_all_button = QPushButton("加载所有Mod")
+        load_all_button.clicked.connect(self.load_all_mods)
+        button_layout.addWidget(load_all_button)
+        
+        # 添加启动所有mod按钮
+        start_all_button = QPushButton("启动所有Mod")
+        start_all_button.clicked.connect(self.start_all_mods)
+        button_layout.addWidget(start_all_button)
+        
+        # 添加停止所有mod按钮
+        stop_all_button = QPushButton("停止所有Mod")
+        stop_all_button.clicked.connect(self.stop_all_mods)
+        button_layout.addWidget(stop_all_button)
+        
+        # 将按钮布局添加到主布局
+        self.main_layout.addLayout(button_layout)
+        
+        # 设置主布局
+        self.setLayout(self.main_layout)
+    
+    def refresh_mod_list(self) -> None:
+        '''刷新mod列表'''
+        # 清空现有列表
+        for i in reversed(range(self.mod_list_layout.count())):
+            widget = self.mod_list_layout.itemAt(i).widget()
+            if widget:
+                widget.deleteLater()
+        
+        # 扫描mods目录
+        mods = self.mod_manager.scan_mods()
+        loaded_mods_info = self.mod_manager.get_all_mods_info()
+        
+        # 创建加载状态字典
+        loaded_mods = {mod['mod_id']: mod for mod in loaded_mods_info}
+        
+        # 添加mod到列表
+        if not mods:
+            no_mods_label = QLabel("暂无mod")
+            no_mods_label.setStyleSheet("color: gray; qproperty-alignment: AlignCenter;")
+            self.mod_list_layout.addWidget(no_mods_label)
+        else:
+            for mod_name in mods:
+                # 检查mod是否已加载
+                mod_id = mod_name
+                mod_info = loaded_mods.get(mod_id)
+                is_loaded = mod_info is not None
+                is_running = mod_info.get('is_running', False) if is_loaded else False
+                
+                # 创建mod项布局
+                mod_item_layout = QHBoxLayout()
+                
+                # 添加mod名称
+                mod_name_label = QLabel(f"Mod: {mod_name}")
+                mod_name_label.setFixedWidth(200)
+                mod_item_layout.addWidget(mod_name_label)
+                
+                # 添加状态标签
+                status_text = "运行中" if is_running else "已加载" if is_loaded else "未加载"
+                status_label = QLabel(status_text)
+                status_label.setFixedWidth(100)
+                if is_running:
+                    status_label.setStyleSheet("color: green;")
+                elif is_loaded:
+                    status_label.setStyleSheet("color: blue;")
+                else:
+                    status_label.setStyleSheet("color: gray;")
+                mod_item_layout.addWidget(status_label)
+                
+                # 添加操作按钮
+                if not is_loaded:
+                    # 未加载，显示加载按钮
+                    load_button = QPushButton("加载")
+                    load_button.clicked.connect(lambda _, name=mod_name: self.load_mod(name))
+                    mod_item_layout.addWidget(load_button)
+                else:
+                    # 已加载，显示启动/停止按钮
+                    if not is_running:
+                        start_button = QPushButton("启动")
+                        start_button.clicked.connect(lambda _, id=mod_id: self.start_mod(id))
+                        mod_item_layout.addWidget(start_button)
+                    else:
+                        stop_button = QPushButton("停止")
+                        stop_button.clicked.connect(lambda _, id=mod_id: self.stop_mod(id))
+                        mod_item_layout.addWidget(stop_button)
+                    
+                    # 显示卸载按钮
+                    unload_button = QPushButton("卸载")
+                    unload_button.clicked.connect(lambda _, id=mod_id: self.unload_mod(id))
+                    mod_item_layout.addWidget(unload_button)
+                
+                # 显示移除按钮
+                remove_button = QPushButton("移除")
+                remove_button.clicked.connect(lambda _, name=mod_name: self.remove_mod(name))
+                mod_item_layout.addWidget(remove_button)
+                
+                # 创建mod项部件
+                mod_item_widget = QWidget()
+                mod_item_widget.setLayout(mod_item_layout)
+                mod_item_widget.setStyleSheet("border-bottom: 1px solid #e0e0e0;")
+                
+                # 添加到列表
+                self.mod_list_layout.addWidget(mod_item_widget)
+    
+    def load_mod(self, mod_name: str) -> None:
+        '''加载mod'''
+        success = self.mod_manager.load_mod(mod_name)
+        if success:
+            MessageBox(
+                self,
+                top_info=f"Mod {mod_name} 加载成功",
+                title="成功",
+                icon=QMessageBox.Information,
+                buttons=("确定", )
+            )
+        else:
+            MessageBox(
+                self,
+                top_info=f"Mod {mod_name} 加载失败",
+                title="错误",
+                icon=QMessageBox.Critical,
+                buttons=("确定", )
+            )
+        self.refresh_mod_list()
+    
+    def unload_mod(self, mod_id: str) -> None:
+        '''卸载mod'''
+        success = self.mod_manager.unload_mod(mod_id)
+        if success:
+            MessageBox(
+                self,
+                top_info=f"Mod {mod_id} 卸载成功",
+                title="成功",
+                icon=QMessageBox.Information,
+                buttons=("确定", )
+            )
+        else:
+            MessageBox(
+                self,
+                top_info=f"Mod {mod_id} 卸载失败",
+                title="错误",
+                icon=QMessageBox.Critical,
+                buttons=("确定", )
+            )
+        self.refresh_mod_list()
+    
+    def start_mod(self, mod_id: str) -> None:
+        '''启动mod'''
+        success = self.mod_manager.start_mod(mod_id)
+        if success:
+            MessageBox(
+                self,
+                top_info=f"Mod {mod_id} 启动成功",
+                title="成功",
+                icon=QMessageBox.Information,
+                buttons=("确定", )
+            )
+        else:
+            MessageBox(
+                self,
+                top_info=f"Mod {mod_id} 启动失败",
+                title="错误",
+                icon=QMessageBox.Critical,
+                buttons=("确定", )
+            )
+        self.refresh_mod_list()
+    
+    def stop_mod(self, mod_id: str) -> None:
+        '''停止mod'''
+        success = self.mod_manager.stop_mod(mod_id)
+        if success:
+            MessageBox(
+                self,
+                top_info=f"Mod {mod_id} 停止成功",
+                title="成功",
+                icon=QMessageBox.Information,
+                buttons=("确定", )
+            )
+        else:
+            MessageBox(
+                self,
+                top_info=f"Mod {mod_id} 停止失败",
+                title="错误",
+                icon=QMessageBox.Critical,
+                buttons=("确定", )
+            )
+        self.refresh_mod_list()
+    
+    def remove_mod(self, mod_name: str) -> None:
+        '''移除mod'''
+        if MessageBox(
+            self,
+            top_info=f"确定要移除Mod {mod_name} 吗？",
+            title="确认",
+            icon=QMessageBox.Question,
+            buttons=("是", "否")
+        ) != "是":
+            return
+        
+        success = self.mod_manager.remove_mod(mod_name)
+        if success:
+            MessageBox(
+                self,
+                top_info=f"Mod {mod_name} 移除成功",
+                title="成功",
+                icon=QMessageBox.Information,
+                buttons=("确定", )
+            )
+        else:
+            MessageBox(
+                self,
+                top_info=f"Mod {mod_name} 移除失败",
+                title="错误",
+                icon=QMessageBox.Critical,
+                buttons=("确定", )
+            )
+        self.refresh_mod_list()
+    
+    def open_mods_folder(self) -> None:
+        '''打开mods文件夹'''
+        success = self.mod_manager.open_mods_directory()
+        if not success:
+            MessageBox(
+                self,
+                top_info="打开Mods文件夹失败",
+                title="错误",
+                icon=QMessageBox.Critical,
+                buttons=("确定", )
+            )
+    
+    def load_all_mods(self) -> None:
+        '''加载所有mod'''
+        results = self.mod_manager.load_all_mods()
+        success_count = sum(1 for success in results.values() if success)
+        total_count = len(results)
+        
+        MessageBox(
+            self,
+            top_info=f"加载完成",
+            info=f"成功: {success_count}, 失败: {total_count - success_count}",
+            title="信息",
+            icon=QMessageBox.Information,
+            buttons=("确定", )
+        )
+        self.refresh_mod_list()
+    
+    def start_all_mods(self) -> None:
+        '''启动所有mod'''
+        results = self.mod_manager.start_all_mods()
+        success_count = sum(1 for success in results.values() if success)
+        total_count = len(results)
+        
+        MessageBox(
+            self,
+            top_info=f"启动完成",
+            info=f"成功: {success_count}, 失败: {total_count - success_count}",
+            title="信息",
+            icon=QMessageBox.Information,
+            buttons=("确定", )
+        )
+        self.refresh_mod_list()
+    
+    def stop_all_mods(self) -> None:
+        '''停止所有mod'''
+        results = self.mod_manager.stop_all_mods()
+        success_count = sum(1 for success in results.values() if success)
+        total_count = len(results)
+        
+        MessageBox(
+            self,
+            top_info=f"停止完成",
+            info=f"成功: {success_count}, 失败: {total_count - success_count}",
+            title="信息",
+            icon=QMessageBox.Information,
+            buttons=("确定", )
+        )
+        self.refresh_mod_list()
 
 
 class SetUpWindow(QDialog):
