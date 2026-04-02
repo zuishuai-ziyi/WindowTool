@@ -1,3 +1,4 @@
+**本工具正在重构中，不建议在此时提交 PR** (重构中的仓库暂不公开)
 # 窗口管理工具
 
 - 本工具由 python 编写，旨在获取并更改窗口信息。
@@ -64,8 +65,6 @@
 
 新增日志记录功能
 
-![GitHub Repo stars](https://img.shields.io/github/stars/zuishuai-ziyi/WindowTool) ![GitHub followers](https://img.shields.io/github/followers/zuishuai-ziyi) ![GitHub forks](https://img.shields.io/github/forks/zuishuai-ziyi/WindowTool)
-
 #### v1.2.1
 
 修复部分BUG。
@@ -73,8 +72,9 @@
    - 主要比较大小和计算10个哈希防止哈希碰撞
  - 修复了程序选择自己pid为负数崩溃的问题
 
-
  #### v1.3.0
  ### 插件更新
  - 添加了mod菜单
- - 具体写法查看mod\MOD_DOCUMENTATION.md
+ - 具体写法查看 ![MOD DOC](\mod\MOD_DOCUMENTATION.md)
+
+![GitHub Repo stars](https://img.shields.io/github/stars/zuishuai-ziyi/WindowTool) ![GitHub followers](https://img.shields.io/github/followers/zuishuai-ziyi) ![GitHub forks](https://img.shields.io/github/forks/zuishuai-ziyi/WindowTool)
